@@ -4,32 +4,33 @@ import { NextResponse } from "next/server";
 export async function POST(req: Request) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
-    
-    // DEBUG LOG
-    console.log("🔐 Key Status:", apiKey ? "Loaded Successfully" : "MISSING");
-
-    if (!apiKey) {
-      return NextResponse.json({ error: "Server Error: API Key is missing in .env.local" }, { status: 500 });
-    }
+    if (!apiKey) return NextResponse.json({ error: "API Key missing" }, { status: 500 });
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    
-    // 🔴 USING 1.5 FLASH (Most stable free model)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-flash",
+      // 👇👇👇 CHANGE PERSONALITY HERE 👇👇👇
+      systemInstruction: `
+        You are Mika. 
+        RELATIONSHIP: You are the user's best friend and also their strict NEET tutor.
+        TONE: Warm, encouraging, slightly sassy, but highly intellectual.
+        
+        RULES:
+        1. If asked about Biology/Physics/Chem, stick STRICTLY to NCERT.
+        2. Use emojis like 🌸, ✨, 🧬.
+        3. If the user is stressed, be a therapist first, then a teacher.
+        4. Allow the user to vent.
+      `
+    });
 
     const { message, history, fileData, mimeType } = await req.json();
 
-    // Optimize history (Last 5 messages)
-    const recentHistory = history ? history.slice(-5) : [];
-
+    const recentHistory = history ? history.slice(-6) : [];
     const promptParts: any[] = [{ text: message }];
 
     if (fileData) {
       promptParts.push({
-        inlineData: {
-          data: fileData,
-          mimeType: mimeType || "application/pdf",
-        },
+        inlineData: { data: fileData, mimeType: mimeType || "application/pdf" },
       });
     }
 
@@ -39,8 +40,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ response: result.response.text() });
 
   } catch (error: any) {
-    console.error("🔥 ACTUAL SERVER ERROR:", error.message);
-    // Send the REAL error message to the frontend
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
