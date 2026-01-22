@@ -15,8 +15,8 @@ import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { collection, addDoc, query, orderBy, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, setDoc, getDoc } from "firebase/firestore";
 
-// Compressor
-import { compressImage } from "../lib/compress";
+// Helpers
+import { compressImage, readPdfBase64 } from "../lib/compress";
 
 import "../globals.css";
 
@@ -54,11 +54,11 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isNotesOpen, setNotesOpen] = useState(false);
-  const [activeFile, setActiveFile] = useState<{file: File, preview: string} | null>(null);
+  const [activeFile, setActiveFile] = useState<{file: File, preview: string, type: 'image' | 'pdf'} | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [dragActive, setDragActive] = useState(false);
 
-  // Features (Restored!)
+  // Features
   const [streak, setStreak] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
@@ -72,16 +72,10 @@ export default function Dashboard() {
       if (!u) router.push("/");
       else {
         setUser(u);
-        // Load Streak from Firestore
         const statsRef = doc(db, "users", u.uid, "stats", "general");
         const statsSnap = await getDoc(statsRef);
-        if (statsSnap.exists()) {
-          setStreak(statsSnap.data().streak || 0);
-        } else {
-          // Initialize stats
-          setDoc(statsRef, { streak: 1, lastLogin: serverTimestamp() });
-          setStreak(1);
-        }
+        if (statsSnap.exists()) setStreak(statsSnap.data().streak || 0);
+        else { setDoc(statsRef, { streak: 1, lastLogin: serverTimestamp() }); setStreak(1); }
       }
     });
     return () => unsub();
@@ -106,63 +100,74 @@ export default function Dashboard() {
     });
   }, [user, activeSessionId]);
 
-  // TIMER LOGIC
+  // TIMER
   useEffect(() => {
     let interval: any;
-    if (timerActive && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    } else if (timeLeft === 0) {
-      setTimerActive(false);
-      alert("Pomodoro Complete! 🌸");
-      setTimeLeft(25 * 60);
-    }
+    if (timerActive && timeLeft > 0) interval = setInterval(() => setTimeLeft((t) => t - 1), 1000);
+    else if (timeLeft === 0) { setTimerActive(false); alert("Pomodoro Complete! 🌸"); setTimeLeft(25 * 60); }
     return () => clearInterval(interval);
   }, [timerActive, timeLeft]);
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  // ACTIONS
+  // FILE SELECTION
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
-      setActiveFile({ file, preview: URL.createObjectURL(file) });
+      const isPdf = file.type === "application/pdf";
+      setActiveFile({ 
+        file, 
+        preview: isPdf ? "" : URL.createObjectURL(file), // No preview URL for PDF to save memory
+        type: isPdf ? 'pdf' : 'image' 
+      });
     }
   };
 
+  // --- SEND LOGIC (FIXED FOR PDF) ---
   const handleSend = async () => {
     if ((!input.trim() && !activeFile) || isLoading || !user) return;
 
     let chatId = activeSessionId;
     if (!chatId) {
-      const docRef = await addDoc(collection(db, "users", user.uid, "chats"), { title: input.slice(0, 20) || "Image Analysis", createdAt: serverTimestamp() });
+      const docRef = await addDoc(collection(db, "users", user.uid, "chats"), { title: input.slice(0, 20) || "Study Session", createdAt: serverTimestamp() });
       chatId = docRef.id;
       setActiveSessionId(chatId);
     }
 
     setIsLoading(true);
     const text = input;
-    const file = activeFile;
+    const currentFile = activeFile;
     setInput(""); setActiveFile(null);
 
     try {
       let base64String = null;
-      let displayImage = null;
+      let dbImageString = null; // What we save to Firestore
 
-      // 1. COMPRESS IMAGE (Fixes the "Too Long" error)
-      if (file) {
-        base64String = await compressImage(file.file);
-        displayImage = `data:${file.file.type};base64,${base64String}`;
+      if (currentFile) {
+        if (currentFile.type === 'image') {
+          // 1. IMAGE: Compress -> Send to AI -> Save to DB (It's small enough)
+          base64String = await compressImage(currentFile.file);
+          dbImageString = `data:${currentFile.file.type};base64,${base64String}`;
+        } else {
+          // 2. PDF: Read Raw -> Send to AI -> DO NOT SAVE TO DB (Too big)
+          base64String = await readPdfBase64(currentFile.file);
+          // We don't save the base64 to Firestore to avoid 1MB limit crash
+          dbImageString = null; 
+        }
       }
 
-      // 2. SAVE USER MSG
+      // SAVE USER MSG TO DB
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "user",
         text: text,
-        image: displayImage, // Now it's small enough!
+        // If it's a PDF, we save a marker text instead of the file data
+        image: dbImageString,
+        isPdf: currentFile?.type === 'pdf',
+        pdfName: currentFile?.type === 'pdf' ? currentFile.file.name : null,
         createdAt: serverTimestamp()
       });
 
-      // 3. API CALL
+      // API CALL
       const historyForApi = messages.slice(-5).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -170,13 +175,13 @@ export default function Dashboard() {
         body: JSON.stringify({ 
           message: text, 
           history: historyForApi, 
-          fileData: base64String, // Send raw base64 to API
-          mimeType: file?.file.type 
+          fileData: base64String, // Send the heavy data to AI
+          mimeType: currentFile?.file.type 
         }),
       });
       const data = await res.json();
       
-      // 4. SAVE AI MSG
+      // SAVE AI MSG TO DB
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "model",
         text: data.response || data.error,
@@ -193,7 +198,14 @@ export default function Dashboard() {
 
   // Drag & Drop
   const handleDrag = (e: any) => { e.preventDefault(); e.stopPropagation(); if (e.type === "dragenter" || e.type === "dragover") setDragActive(true); else if (e.type === "dragleave") setDragActive(false); };
-  const handleDrop = (e: any) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files?.[0]) setActiveFile({ file: e.dataTransfer.files[0], preview: URL.createObjectURL(e.dataTransfer.files[0]) }); };
+  const handleDrop = (e: any) => { 
+    e.preventDefault(); e.stopPropagation(); setDragActive(false); 
+    if (e.dataTransfer.files?.[0]) {
+      const file = e.dataTransfer.files[0];
+      const isPdf = file.type === "application/pdf";
+      setActiveFile({ file, preview: isPdf ? "" : URL.createObjectURL(file), type: isPdf ? 'pdf' : 'image' });
+    }
+  };
 
   // Note Actions
   const handleNewNote = async () => { const ref = await addDoc(collection(db, "users", user.uid, "notes"), { title: "Untitled", content: "", updatedAt: serverTimestamp() }); setActiveNoteId(ref.id); };
@@ -236,9 +248,7 @@ export default function Dashboard() {
         <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md">
            <div className="flex items-center gap-4">
              <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-pink-500/20 bg-pink-500/5"><span className="w-1.5 h-1.5 rounded-full animate-pulse bg-pink-500"></span><span className="text-xs font-medium text-pink-400">Online</span></div>
-             {/* STREAK RESTORED */}
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
-             {/* TIMER RESTORED */}
              <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border ${timerActive ? 'border-emerald-500/30 text-emerald-400' : 'border-white/10 text-zinc-400'}`}>
                 <Timer size={14} />
                 <span className="text-xs font-mono">{formatTime(timeLeft)}</span>
@@ -258,7 +268,16 @@ export default function Dashboard() {
                <div key={i} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "user" ? "bg-zinc-800" : "bg-gradient-to-br from-pink-600 to-purple-600"}`}>{msg.role === "user" ? "YOU" : <Sparkles size={16}/>}</div>
                   <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                    
+                    {/* DISPLAY LOGIC: Show image if exists, or show PDF badge if isPdf */}
                     {msg.image && <img src={msg.image} className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1" />}
+                    {msg.isPdf && (
+                      <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm">
+                        <FileText size={16} /> 
+                        <span className="font-medium">PDF Analyzed: {msg.pdfName || "Document"}</span>
+                      </div>
+                    )}
+
                     <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md prose prose-invert max-w-none ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
