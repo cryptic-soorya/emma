@@ -39,7 +39,7 @@ export default function Login() {
             <Sparkles size={40} className="text-white" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2">Mika 2.0</h1>
-          <p className="text-zinc-400 mb-8">Neural Study Companion</p>
+          <p className="text-zinc-400 mb-8">Personal Study Companion</p>
           
           <button 
             onClick={handleLogin} disabled={loading}

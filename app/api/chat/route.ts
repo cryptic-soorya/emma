@@ -12,12 +12,12 @@ export async function POST(req: Request) {
     
     // 1. INITIALIZE MODEL WITH PERSONALITY
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash", // Or "gemini-2.0-flash" if you have access
+      model: "gemini-2.5-flash", // 
       
-      // 👇👇👇 CHANGE MIKA'S PERSONALITY HERE 👇👇👇
+      // MIKA'S PERSONALITY PROMPT
       systemInstruction: `
         You are Mika. 
-        RELATIONSHIP: You are the user's best friend and also their strict NEET tutor.
+        RELATIONSHIP: You are the user's best friend and also their strict NEET and NIFT tutor.
         TONE: Warm, encouraging, slightly sassy, but highly intellectual.
         
         RULES:

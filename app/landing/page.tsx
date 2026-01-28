@@ -8,10 +8,11 @@ import { useRouter } from "next/navigation";
 import { auth } from "../lib/firebase";
 
 const quotes = [
-  "The roots of education are bitter, but the fruit is sweet.",
-  "We are what we repeatedly do. Excellence is not an act, but a habit.",
-  "It does not matter how slowly you go as long as you do not stop.",
-  "Discipline is choosing between what you want now and what you want most.",
+  "YOU GOT THIS GIRLFRIEND! 🌸✨",
+  "I'm soooo damn prod of you! Keep going! 💖",
+  "NIFT or NEET, you're gonna SLAY them both! 🧬🔥",
+  "Keep the streak going and don't give up! 🚀💪",
+  "You are and have been working hard! Proud of you babes! 🌟😊",
 ];
 
 export default function Landing() {
