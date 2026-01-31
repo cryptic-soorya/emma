@@ -20,7 +20,7 @@ import { compressImage, readPdfBase64 } from "../lib/compress";
 
 import "../globals.css";
 
-// --- SAKURA ---
+// --- SAKURA ANIMATION ---
 const SakuraRain = () => {
   const [petals, setPetals] = useState<any[]>([]);
   useEffect(() => {
@@ -110,20 +110,38 @@ export default function Dashboard() {
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  // FILE SELECTION
+  // FILE HANDLING
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       const file = e.target.files[0];
       const isPdf = file.type === "application/pdf";
       setActiveFile({ 
         file, 
-        preview: isPdf ? "" : URL.createObjectURL(file), // No preview URL for PDF to save memory
+        preview: isPdf ? "" : URL.createObjectURL(file),
         type: isPdf ? 'pdf' : 'image' 
       });
     }
   };
 
-  // --- SEND LOGIC (FIXED FOR PDF) ---
+  // --- PASTE HANDLER FOR CHAT (NEW ADDITION) ---
+  const handleChatPaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData.items;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        e.preventDefault(); 
+        const file = items[i].getAsFile();
+        if (file) {
+          setActiveFile({ 
+            file, 
+            preview: URL.createObjectURL(file), 
+            type: 'image' 
+          });
+        }
+      }
+    }
+  };
+
+  // --- SEND LOGIC ---
   const handleSend = async () => {
     if ((!input.trim() && !activeFile) || isLoading || !user) return;
 
@@ -141,26 +159,24 @@ export default function Dashboard() {
 
     try {
       let base64String = null;
-      let dbImageString = null; // What we save to Firestore
+      let dbImageString = null;
 
       if (currentFile) {
         if (currentFile.type === 'image') {
-          // 1. IMAGE: Compress -> Send to AI -> Save to DB (It's small enough)
+          // 1. IMAGE: Compress -> Save
           base64String = await compressImage(currentFile.file);
           dbImageString = `data:${currentFile.file.type};base64,${base64String}`;
         } else {
-          // 2. PDF: Read Raw -> Send to AI -> DO NOT SAVE TO DB (Too big)
+          // 2. PDF: Read Raw -> Do NOT Save DB (Too big)
           base64String = await readPdfBase64(currentFile.file);
-          // We don't save the base64 to Firestore to avoid 1MB limit crash
           dbImageString = null; 
         }
       }
 
-      // SAVE USER MSG TO DB
+      // SAVE USER MSG
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "user",
         text: text,
-        // If it's a PDF, we save a marker text instead of the file data
         image: dbImageString,
         isPdf: currentFile?.type === 'pdf',
         pdfName: currentFile?.type === 'pdf' ? currentFile.file.name : null,
@@ -175,13 +191,13 @@ export default function Dashboard() {
         body: JSON.stringify({ 
           message: text, 
           history: historyForApi, 
-          fileData: base64String, // Send the heavy data to AI
+          fileData: base64String, 
           mimeType: currentFile?.file.type 
         }),
       });
       const data = await res.json();
       
-      // SAVE AI MSG TO DB
+      // SAVE AI MSG
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "model",
         text: data.response || data.error,
@@ -269,7 +285,6 @@ export default function Dashboard() {
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "user" ? "bg-zinc-800" : "bg-gradient-to-br from-pink-600 to-purple-600"}`}>{msg.role === "user" ? "YOU" : <Sparkles size={16}/>}</div>
                   <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
                     
-                    {/* DISPLAY LOGIC: Show image if exists, or show PDF badge if isPdf */}
                     {msg.image && <img src={msg.image} className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1" />}
                     {msg.isPdf && (
                       <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm">
@@ -298,7 +313,14 @@ export default function Dashboard() {
            <div className="flex items-center bg-zinc-900/80 border border-white/10 rounded-2xl px-2 py-2 shadow-2xl backdrop-blur-xl">
              <button onClick={() => fileInputRef.current?.click()} className="p-3 hover:bg-white/5 rounded-xl text-zinc-500 hover:text-pink-400"><Paperclip size={20}/></button>
              <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileSelect}/>
-             <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} placeholder="Ask Mika..." className="flex-1 bg-transparent outline-none px-4 text-sm text-zinc-200"/>
+             <input 
+                value={input} 
+                onChange={e => setInput(e.target.value)} 
+                onKeyDown={e => e.key === 'Enter' && handleSend()} 
+                onPaste={handleChatPaste} // <--- PASTE HANDLER ADDED HERE
+                placeholder="Ask Mika..." 
+                className="flex-1 bg-transparent outline-none px-4 text-sm text-zinc-200"
+             />
              <button onClick={handleSend} disabled={isLoading} className="p-3 rounded-xl text-white bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg"><Send size={18}/></button>
            </div>
         </div>
