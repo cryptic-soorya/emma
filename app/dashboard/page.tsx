@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { 
-  Menu, Plus, MessageSquare, BookOpen, Settings, Edit3, Sparkles, Send, Trash2, 
+  Menu, Plus, MessageSquare, BookOpen, Edit3, Sparkles, Send, Trash2, 
   Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut, UploadCloud
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -20,7 +20,7 @@ import { compressImage, readPdfBase64 } from "../lib/compress";
 
 import "../globals.css";
 
-// --- SAKURA ANIMATION ---
+// --- SAKURA ---
 const SakuraRain = () => {
   const [petals, setPetals] = useState<any[]>([]);
   useEffect(() => {
@@ -54,11 +54,13 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isNotesOpen, setNotesOpen] = useState(false);
-  const [activeFile, setActiveFile] = useState<{file: File, preview: string, type: 'image' | 'pdf'} | null>(null);
+  
+  // --- STICKY CONTEXT STATE ---
+  // We keep the file here until the user manually clears it
+  const [activeFile, setActiveFile] = useState<{file: File, preview: string, type: 'image' | 'pdf', base64: string} | null>(null);
+  
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [dragActive, setDragActive] = useState(false);
-
-  // Features
   const [streak, setStreak] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
@@ -85,14 +87,13 @@ export default function Dashboard() {
     if (!user) return;
     const qChats = query(collection(db, "users", user.uid, "chats"), orderBy("createdAt", "desc"));
     const unsubChats = onSnapshot(qChats, (snap) => setSessions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    
     const qNotes = query(collection(db, "users", user.uid, "notes"), orderBy("updatedAt", "desc"));
     const unsubNotes = onSnapshot(qNotes, (snap) => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     return () => { unsubChats(); unsubNotes(); };
   }, [user]);
 
   useEffect(() => {
-    if (!user || !activeSessionId) { setMessages([]); return; }
+    if (!user || !activeSessionId) { setMessages([]); setActiveFile(null); return; } // Clear context on chat switch
     const qMsgs = query(collection(db, "users", user.uid, "chats", activeSessionId, "messages"), orderBy("createdAt", "asc"));
     return onSnapshot(qMsgs, (snap) => {
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -110,38 +111,41 @@ export default function Dashboard() {
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
-  // FILE HANDLING
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) {
-      const file = e.target.files[0];
-      const isPdf = file.type === "application/pdf";
-      setActiveFile({ 
-        file, 
-        preview: isPdf ? "" : URL.createObjectURL(file),
-        type: isPdf ? 'pdf' : 'image' 
-      });
+  // FILE PROCESSING
+  const processFile = async (file: File) => {
+    const isPdf = file.type === "application/pdf";
+    // We pre-calculate base64 here to store it in state for "Sticky" access
+    let base64 = "";
+    if (isPdf) {
+      base64 = await readPdfBase64(file);
+    } else {
+      base64 = await compressImage(file);
     }
+
+    setActiveFile({ 
+      file, 
+      preview: isPdf ? "" : URL.createObjectURL(file), 
+      type: isPdf ? 'pdf' : 'image',
+      base64: base64
+    });
   };
 
-  // --- PASTE HANDLER FOR CHAT (NEW ADDITION) ---
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.[0]) processFile(e.target.files[0]);
+  };
+
   const handleChatPaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData.items;
     for (let i = 0; i < items.length; i++) {
       if (items[i].type.indexOf("image") !== -1) {
-        e.preventDefault(); 
+        e.preventDefault();
         const file = items[i].getAsFile();
-        if (file) {
-          setActiveFile({ 
-            file, 
-            preview: URL.createObjectURL(file), 
-            type: 'image' 
-          });
-        }
+        if (file) processFile(file);
       }
     }
   };
 
-  // --- SEND LOGIC ---
+  // --- SEND LOGIC (STICKY CONTEXT) ---
   const handleSend = async () => {
     if ((!input.trim() && !activeFile) || isLoading || !user) return;
 
@@ -154,45 +158,44 @@ export default function Dashboard() {
 
     setIsLoading(true);
     const text = input;
-    const currentFile = activeFile;
-    setInput(""); setActiveFile(null);
+    // We keep 'activeFile' in state! We do NOT set it to null here.
+    const currentContext = activeFile; 
+    
+    setInput(""); 
 
     try {
-      let base64String = null;
       let dbImageString = null;
 
-      if (currentFile) {
-        if (currentFile.type === 'image') {
-          // 1. IMAGE: Compress -> Save
-          base64String = await compressImage(currentFile.file);
-          dbImageString = `data:${currentFile.file.type};base64,${base64String}`;
-        } else {
-          // 2. PDF: Read Raw -> Do NOT Save DB (Too big)
-          base64String = await readPdfBase64(currentFile.file);
-          dbImageString = null; 
-        }
+      // Only save image to DB if it's an image (PDFs are too big)
+      if (currentContext && currentContext.type === 'image') {
+        dbImageString = `data:${currentContext.file.type};base64,${currentContext.base64}`;
       }
 
-      // SAVE USER MSG
+      // SAVE USER MSG TO DB
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "user",
         text: text,
-        image: dbImageString,
-        isPdf: currentFile?.type === 'pdf',
-        pdfName: currentFile?.type === 'pdf' ? currentFile.file.name : null,
+        // We only save the visual to the chat log if it's a new upload or just to show context usage
+        // For clean UI, maybe we don't save the huge string every time, just the text.
+        // But for now, let's just save text to keep DB light, unless it's an image.
+        image: dbImageString, 
+        isPdf: currentContext?.type === 'pdf',
+        pdfName: currentContext?.type === 'pdf' ? currentContext.file.name : null,
         createdAt: serverTimestamp()
       });
 
-      // API CALL
+      // API CALL (SENDS CONTEXT EVERY TIME)
       const historyForApi = messages.slice(-5).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
+      
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           message: text, 
           history: historyForApi, 
-          fileData: base64String, 
-          mimeType: currentFile?.file.type 
+          // ALWAYS send the active file data
+          fileData: currentContext?.base64, 
+          mimeType: currentContext?.file.type 
         }),
       });
       const data = await res.json();
@@ -216,11 +219,7 @@ export default function Dashboard() {
   const handleDrag = (e: any) => { e.preventDefault(); e.stopPropagation(); if (e.type === "dragenter" || e.type === "dragover") setDragActive(true); else if (e.type === "dragleave") setDragActive(false); };
   const handleDrop = (e: any) => { 
     e.preventDefault(); e.stopPropagation(); setDragActive(false); 
-    if (e.dataTransfer.files?.[0]) {
-      const file = e.dataTransfer.files[0];
-      const isPdf = file.type === "application/pdf";
-      setActiveFile({ file, preview: isPdf ? "" : URL.createObjectURL(file), type: isPdf ? 'pdf' : 'image' });
-    }
+    if (e.dataTransfer.files?.[0]) processFile(e.dataTransfer.files[0]);
   };
 
   // Note Actions
@@ -284,15 +283,8 @@ export default function Dashboard() {
                <div key={i} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "user" ? "bg-zinc-800" : "bg-gradient-to-br from-pink-600 to-purple-600"}`}>{msg.role === "user" ? "YOU" : <Sparkles size={16}/>}</div>
                   <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
-                    
                     {msg.image && <img src={msg.image} className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1" />}
-                    {msg.isPdf && (
-                      <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm">
-                        <FileText size={16} /> 
-                        <span className="font-medium">PDF Analyzed: {msg.pdfName || "Document"}</span>
-                      </div>
-                    )}
-
+                    {msg.isPdf && <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm"><FileText size={16} /><span className="font-medium">PDF Analyzed: {msg.pdfName}</span></div>}
                     <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md prose prose-invert max-w-none ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
@@ -305,9 +297,12 @@ export default function Dashboard() {
         </div>
 
         <div className="p-6">
+           {/* STICKY CONTEXT INDICATOR */}
            {activeFile && (
-             <div className="mb-2 flex items-center gap-2 bg-zinc-800/80 px-3 py-2 rounded-lg text-xs text-pink-200 w-fit backdrop-blur-md border border-white/10">
-               <FileText size={14}/><span>{activeFile.file.name}</span><button onClick={() => setActiveFile(null)}><X size={12}/></button>
+             <div className="mb-2 flex items-center gap-2 bg-pink-900/40 border border-pink-500/40 px-3 py-2 rounded-lg text-xs text-pink-200 w-fit backdrop-blur-md shadow-lg">
+               <FileText size={14}/>
+               <span>Using Context: <strong>{activeFile.file.name}</strong></span>
+               <button onClick={() => setActiveFile(null)} className="hover:text-white ml-2 bg-black/20 rounded-full p-0.5"><X size={12}/></button>
              </div>
            )}
            <div className="flex items-center bg-zinc-900/80 border border-white/10 rounded-2xl px-2 py-2 shadow-2xl backdrop-blur-xl">
@@ -317,8 +312,8 @@ export default function Dashboard() {
                 value={input} 
                 onChange={e => setInput(e.target.value)} 
                 onKeyDown={e => e.key === 'Enter' && handleSend()} 
-                onPaste={handleChatPaste} // <--- PASTE HANDLER ADDED HERE
-                placeholder="Ask Mika..." 
+                onPaste={handleChatPaste}
+                placeholder={activeFile ? "Ask about the file..." : "Ask Mika..."} 
                 className="flex-1 bg-transparent outline-none px-4 text-sm text-zinc-200"
              />
              <button onClick={handleSend} disabled={isLoading} className="p-3 rounded-xl text-white bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg"><Send size={18}/></button>
