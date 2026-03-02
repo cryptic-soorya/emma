@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     
     // 1. INITIALIZE MODEL WITH PERSONALITY
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash", // 
+      model: "gemini-2.5-flash-lite", // 
       
       // MIKA'S PERSONALITY PROMPT
       systemInstruction: `
