@@ -8,7 +8,7 @@ import remarkGfm from "remark-gfm";
 import {
   Menu, Plus, MessageSquare, BookOpen, Edit3, Sparkles, Send, Trash2,
   Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut, UploadCloud,
-  Edit2, BrainCircuit,
+  Edit2, BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -78,13 +78,15 @@ export default function Dashboard() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
+  const [mistakes, setMistakes] = useState<any[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
 
   // UI
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
-  const [isNotesOpen, setNotesOpen] = useState(false);
+  const [isRightSidebarOpen, setRightSidebarOpen] = useState(false);
+  const [rightSidebarMode, setRightSidebarMode] = useState<"notebook" | "mistakes">("notebook");
   const [toast, setToast] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -103,12 +105,17 @@ export default function Dashboard() {
   const [timerActive, setTimerActive] = useState(false);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
 
+  // Voice State
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
   // Renaming State
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editChatTitle, setEditChatTitle] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -127,7 +134,6 @@ export default function Dashboard() {
         if (statsSnap.exists()) {
           setStreak(statsSnap.data().streak || 0);
         } else {
-          // FIX: await setDoc so errors surface
           await setDoc(statsRef, { streak: 1, lastLogin: serverTimestamp() });
           setStreak(1);
         }
@@ -152,9 +158,17 @@ export default function Dashboard() {
     const unsubNotes = onSnapshot(qNotes, (snap) =>
       setNotes(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     );
+    const qMistakes = query(
+      collection(db, "users", user.uid, "mistakes"),
+      orderBy("createdAt", "desc")
+    );
+    const unsubMistakes = onSnapshot(qMistakes, (snap) =>
+      setMistakes(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
     return () => {
       unsubChats();
       unsubNotes();
+      unsubMistakes();
     };
   }, [user]);
 
@@ -177,7 +191,7 @@ export default function Dashboard() {
     });
   }, [user, activeSessionId]);
 
-  // TIMER — FIX: typed interval correctly, replaced alert with toast
+  // TIMER
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
     if (timerActive && timeLeft > 0) {
@@ -193,7 +207,80 @@ export default function Dashboard() {
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
 
-  // FILE PROCESSING
+// --- VOICE INPUT ---
+const startListening = () => {
+  const SpeechRecognition =
+    (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+  if (!SpeechRecognition) {
+    showToast("⚠️ Browser does not support voice input.");
+    return;
+  }
+
+  // Toggle off if already listening
+  if (isListening && recognitionRef.current) {
+    recognitionRef.current.stop();
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognitionRef.current = recognition;
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      setIsListening(false);
+    };
+
+    recognition.onerror = (e: any) => {
+      console.error("Speech recognition error:", e.error);
+      showToast(`🎙 Mic error: ${e.error}`);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => setIsListening(false);
+
+    setIsListening(true);
+    recognition.start();
+  };
+
+  // --- TTS OUTPUT ---
+  const speakText = useCallback(
+    (text: string) => {
+      if (!isSpeaking) return;
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1;
+
+      const assignVoiceAndSpeak = (voices: SpeechSynthesisVoice[]) => {
+        const preferred = voices.find(
+          (v) => v.name.includes("Google US English") || v.localService
+        );
+        if (preferred) utterance.voice = preferred;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        assignVoiceAndSpeak(voices);
+      } else {
+        window.speechSynthesis.addEventListener(
+          "voiceschanged",
+          () => assignVoiceAndSpeak(window.speechSynthesis.getVoices()),
+          { once: true }
+        );
+      }
+    },
+    [isSpeaking]
+  );
+
+  // --- FILE PROCESSING ---
   const processFile = useCallback(async (file: File) => {
     const isPdf = file.type === "application/pdf";
     let base64 = "";
@@ -247,7 +334,6 @@ export default function Dashboard() {
       if (!isSystemCommand) setInput("");
 
       const currentContext = activeFile;
-      // FIX: Clear file after capturing it so UI resets
       setActiveFile(null);
 
       try {
@@ -256,7 +342,6 @@ export default function Dashboard() {
           dbImageString = `${currentContext.file.type};base64,${currentContext.base64}`;
         }
 
-        // SAVE USER MSG
         await addDoc(
           collection(db, "users", user.uid, "chats", chatId, "messages"),
           {
@@ -270,7 +355,6 @@ export default function Dashboard() {
           }
         );
 
-        // API CALL
         const historyForApi = messages
           .slice(-6)
           .map((m) => ({ role: m.role, parts: [{ text: m.text }] }));
@@ -287,10 +371,8 @@ export default function Dashboard() {
         });
 
         if (!res.ok) throw new Error(`API error: ${res.status}`);
-
         const data = await res.json();
 
-        // SAVE AI MSG
         await addDoc(
           collection(db, "users", user.uid, "chats", chatId, "messages"),
           {
@@ -299,6 +381,10 @@ export default function Dashboard() {
             createdAt: serverTimestamp(),
           }
         );
+
+        if (isSpeaking && data.response) {
+          speakText(data.response.replace(/[*#`]/g, ""));
+        }
       } catch (e: any) {
         console.error(e);
         await addDoc(
@@ -313,23 +399,43 @@ export default function Dashboard() {
         setIsLoading(false);
       }
     },
-    [activeFile, isLoading, user, activeSessionId, messages]
+    [activeFile, isLoading, user, activeSessionId, messages, isSpeaking, speakText]
   );
 
   const handleSendClick = () => performSend(input);
 
-  // FIX: replaced alert() with toast
   const handleGenerateQuiz = () => {
     if (!activeSessionId) {
       showToast("💬 Start a chat first!");
       return;
     }
-    const prompt =
-      "Review our conversation above (and any PDF attached). Generate 10 NEET-style Multiple Choice Questions to test my understanding. Do not give the answers immediately. Put answers inside a Spoiler tag at the end.";
-    performSend(prompt, true);
+    performSend(
+      "Review our conversation above (and any PDF attached). Generate 10 NEET-style Multiple Choice Questions to test my understanding. Do not give the answers immediately. Put answers inside a HTML <details> spoiler tag at the end.",
+      true
+    );
   };
 
-  // --- RENAMING LOGIC ---
+  // --- MISTAKE LOG ---
+  const saveToMistakes = async (msg: any) => {
+    if (!user) return;
+    const msgIndex = messages.findIndex((m) => m.id === msg.id);
+    const question =
+      msgIndex > 0 ? messages[msgIndex - 1].text : "Context Question";
+    await addDoc(collection(db, "users", user.uid, "mistakes"), {
+      question,
+      answer: msg.text,
+      createdAt: serverTimestamp(),
+    });
+    showToast("⚠️ Saved to Mistake Log!");
+  };
+
+  const deleteMistake = async (id: string) => {
+    if (!user) return;
+    await deleteDoc(doc(db, "users", user.uid, "mistakes", id));
+    showToast("Removed from log.");
+  };
+
+  // --- RENAMING ---
   const startRenaming = (
     e: React.MouseEvent,
     id: string,
@@ -340,7 +446,6 @@ export default function Dashboard() {
     setEditChatTitle(currentTitle);
   };
 
-  // FIX: null-check user before using user.uid
   const saveRename = async (id: string) => {
     if (!user) return;
     if (editChatTitle.trim()) {
@@ -351,7 +456,7 @@ export default function Dashboard() {
     setEditingChatId(null);
   };
 
-  // Drag & Drop
+  // --- DRAG & DROP ---
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -369,7 +474,7 @@ export default function Dashboard() {
     [processFile]
   );
 
-  // Note Actions
+  // --- NOTE ACTIONS ---
   const handleNewNote = async () => {
     if (!user) return;
     const ref = await addDoc(collection(db, "users", user.uid, "notes"), {
@@ -388,7 +493,6 @@ export default function Dashboard() {
     });
   };
 
-  // FIX: replaced confirm() with inline delete confirm state
   const deleteSession = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     setDeleteConfirmId(id);
@@ -396,13 +500,16 @@ export default function Dashboard() {
 
   const confirmDeleteSession = async () => {
     if (!deleteConfirmId || !user) return;
-    await deleteDoc(doc(db, "users", user.uid, "chats", deleteConfirmId));
+    await deleteDoc(
+      doc(db, "users", user.uid, "chats", deleteConfirmId)
+    );
     if (activeSessionId === deleteConfirmId) setActiveSessionId(null);
     setDeleteConfirmId(null);
   };
 
   const activeNote = notes.find((n) => n.id === activeNoteId);
 
+  // ─────────────── RENDER ───────────────
   return (
     <div
       className="flex h-screen w-full bg-[#050505] text-zinc-100 font-sans overflow-hidden"
@@ -426,41 +533,6 @@ export default function Dashboard() {
         {toast && <Toast message={toast} onClose={() => setToast(null)} />}
       </AnimatePresence>
 
-      {/* Delete Confirm Modal */}
-      <AnimatePresence>
-        {deleteConfirmId && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
-          >
-            <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
-              className="bg-zinc-900 border border-white/10 rounded-2xl p-6 flex flex-col gap-4 w-72"
-            >
-              <p className="text-sm text-zinc-300">Delete this chat session?</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={confirmDeleteSession}
-                  className="flex-1 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl text-sm hover:bg-red-500/30"
-                >
-                  Delete
-                </button>
-                <button
-                  onClick={() => setDeleteConfirmId(null)}
-                  className="flex-1 py-2 bg-white/5 text-zinc-300 border border-white/10 rounded-xl text-sm hover:bg-white/10"
-                >
-                  Cancel
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Drag Overlay */}
       <AnimatePresence>
         {dragActive && (
@@ -478,7 +550,44 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* SIDEBAR */}
+      {/* Delete Confirm Modal */}
+      <AnimatePresence>
+        {deleteConfirmId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center"
+          >
+            <motion.div
+              initial={{ scale: 0.9 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.9 }}
+              className="bg-zinc-900 border border-white/10 rounded-2xl p-6 flex flex-col gap-4 w-72"
+            >
+              <p className="text-sm text-zinc-300">
+                Delete this chat session?
+              </p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setDeleteConfirmId(null)}
+                  className="px-4 py-2 text-sm rounded-xl bg-white/5 hover:bg-white/10 text-zinc-400"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteSession}
+                  className="px-4 py-2 text-sm rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/30"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── LEFT SIDEBAR ─── */}
       <motion.aside
         animate={{ width: isSidebarOpen ? 280 : 70 }}
         className="h-full flex-shrink-0 border-r border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col z-20 shadow-2xl"
@@ -493,6 +602,7 @@ export default function Dashboard() {
             <Menu size={20} className="text-zinc-500 hover:text-white" />
           </button>
         </div>
+
         <div className="px-3 mb-4">
           <button
             onClick={() => {
@@ -507,6 +617,7 @@ export default function Dashboard() {
             )}
           </button>
         </div>
+
         <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
           {sessions.map((s) => (
             <div
@@ -536,7 +647,7 @@ export default function Dashboard() {
                         e.key === "Enter" && saveRename(s.id)
                       }
                       onClick={(e) => e.stopPropagation()}
-                      className="flex-1 bg-zinc-900 text-xs px-2 py-1 rounded border border-pink-500/50 outline-none"
+                      className="flex-1 bg-zinc-800 text-xs text-zinc-100 rounded px-2 py-1 outline-none border border-pink-500/40"
                     />
                   ) : (
                     <span
@@ -549,18 +660,18 @@ export default function Dashboard() {
                       {s.title}
                     </span>
                   )}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => startRenaming(e, s.id, s.title)}
-                      className="hover:text-white text-zinc-500"
+                      className="hover:text-blue-400 text-zinc-600"
                     >
-                      <Edit2 size={12} />
+                      <Edit2 size={11} />
                     </button>
                     <button
                       onClick={(e) => deleteSession(e, s.id)}
-                      className="hover:text-red-400 text-zinc-500"
+                      className="hover:text-red-400 text-zinc-600"
                     >
-                      <Trash2 size={12} />
+                      <Trash2 size={11} />
                     </button>
                   </div>
                 </>
@@ -568,11 +679,12 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
         <div className="p-4 border-t border-white/5">
           {isSidebarOpen && (
             <button
               onClick={() => signOut(auth)}
-              className="text-xs text-red-400 flex gap-2 items-center"
+              className="text-xs text-red-400 flex gap-2 items-center hover:text-red-300"
             >
               <LogOut size={14} /> Sign Out
             </button>
@@ -580,179 +692,245 @@ export default function Dashboard() {
         </div>
       </motion.aside>
 
-      {/* CHAT */}
+      {/* ─── MAIN CHAT ─── */}
       <main className="flex-1 flex flex-col relative z-10 bg-transparent min-w-0">
+        {/* Header */}
         <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-pink-500/20 bg-pink-500/5">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse bg-pink-500" />
-              <span className="text-xs font-medium text-pink-400">Online</span>
-            </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Streak */}
             <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20">
               <Flame size={14} className="fill-orange-400" />
               <span className="text-xs font-bold">{streak} Days</span>
             </div>
+
+            {/* Pomodoro */}
             <button
               onClick={() => setTimerActive(!timerActive)}
-              className={`flex items-center gap-2 px-3 py-1 rounded-full border ${
+              className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${
                 timerActive
-                  ? "border-emerald-500/30 text-emerald-400"
-                  : "border-white/10 text-zinc-400"
+                  ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
+                  : "border-white/10 text-zinc-400 hover:text-white"
               }`}
             >
               <Timer size={14} />
-              <span className="text-xs font-medium">{formatTime(timeLeft)}</span>
+              <span className="text-xs font-mono">{formatTime(timeLeft)}</span>
             </button>
-          </div>
-          <div className="flex items-center gap-2">
+
+            {/* Quiz */}
             <button
               onClick={handleGenerateQuiz}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-purple-500/20 bg-purple-500/5 text-purple-400 hover:bg-purple-500/10 text-xs font-medium"
+              className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
             >
-              <BrainCircuit size={14} /> Quiz Me
+              <BrainCircuit size={14} />
+              <span className="text-xs font-bold">Quiz</span>
+            </button>
+
+            {/* TTS Toggle */}
+            <button
+              onClick={() => {
+                setIsSpeaking((prev) => !prev);
+                window.speechSynthesis.cancel();
+              }}
+              title={isSpeaking ? "Disable voice output" : "Enable voice output"}
+              className={`p-2 rounded-full transition-colors ${
+                isSpeaking
+                  ? "text-pink-400 bg-pink-500/10"
+                  : "text-zinc-500 hover:text-white"
+              }`}
+            >
+              {isSpeaking ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+          </div>
+
+          {/* Right panel toggles */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setRightSidebarMode("mistakes");
+                setRightSidebarOpen(true);
+              }}
+              className={`p-2 rounded-lg transition-colors ${
+                isRightSidebarOpen && rightSidebarMode === "mistakes"
+                  ? "text-yellow-400 bg-yellow-500/10"
+                  : "text-zinc-500 hover:text-white"
+              }`}
+              title="Mistake Log"
+            >
+              <AlertTriangle size={20} />
             </button>
             <button
-              onClick={() => setNotesOpen(!isNotesOpen)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-white/10 text-zinc-400 hover:bg-white/5 text-xs"
+              onClick={() => {
+                setRightSidebarMode("notebook");
+                setRightSidebarOpen(true);
+              }}
+              className={`p-2 rounded-lg transition-colors ${
+                isRightSidebarOpen && rightSidebarMode === "notebook"
+                  ? "text-pink-400 bg-pink-500/10"
+                  : "text-zinc-500 hover:text-white"
+              }`}
+              title="Notebook"
             >
-              <BookOpen size={14} /> Notes
+              <BookOpen size={20} />
             </button>
           </div>
         </header>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-          {messages.length === 0 && !isLoading && (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-center opacity-50">
-              <Sparkles size={40} className="text-pink-400" />
-              <p className="text-zinc-400 text-sm">
-                Ask Mika anything — paste an image, upload a PDF, or just type!
+        <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center opacity-80">
+              <Sparkles size={50} className="text-pink-400 mb-4" />
+              <h2 className="text-xl font-bold text-white">
+                Focus Mode Engaged.
+              </h2>
+              <p className="text-zinc-500 text-sm mt-2">
+                Ask anything or drop a file to begin.
               </p>
             </div>
-          )}
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${
-                msg.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+          ) : (
+            messages.map((msg, i) => (
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                  msg.role === "user"
-                    ? "bg-pink-500/15 border border-pink-500/20 text-pink-50"
-                    : "bg-zinc-800/60 border border-white/5 text-zinc-200"
+                key={i}
+                className={`flex gap-4 ${
+                  msg.role === "user" ? "flex-row-reverse" : ""
                 }`}
               >
-                {msg.image && (
-                  <img
-                    src={msg.image}
-                    alt="attachment"
-                    className="mb-2 rounded-lg max-h-48 object-contain"
-                  />
-                )}
-                {msg.isPdf && (
-                  <div className="flex items-center gap-2 mb-2 text-xs text-zinc-400 bg-white/5 px-2 py-1 rounded-lg">
-                    <FileText size={12} />
-                    {msg.pdfName}
-                  </div>
-                )}
-                <ReactMarkdown
-                  rehypePlugins={[rehypeRaw]}
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    details: ({ node, ...props }) => (
-                      <details
-                        className="mt-2 p-2 bg-black/20 rounded-lg border border-white/5 cursor-pointer hover:bg-black/30 open:bg-black/40"
-                        {...props}
-                      />
-                    ),
-                    summary: ({ node, ...props }) => (
-                      <summary
-                        className="font-semibold text-pink-400 select-none outline-none"
-                        {...props}
-                      />
-                    ),
-                  }}
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg text-xs font-bold ${
+                    msg.role === "user"
+                      ? "bg-zinc-800 text-zinc-300"
+                      : "bg-gradient-to-br from-pink-600 to-purple-600"
+                  }`}
                 >
-                  {msg.text}
-                </ReactMarkdown>
+                  {msg.role === "user" ? "YOU" : <Sparkles size={16} />}
+                </div>
+                <div
+                  className={`flex flex-col gap-2 max-w-[80%] ${
+                    msg.role === "user" ? "items-end" : "items-start"
+                  }`}
+                >
+                  {msg.image && (
+                    <img
+                      src={msg.image}
+                      className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1"
+                      alt="uploaded"
+                    />
+                  )}
+                  {msg.isPdf && (
+                    <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm">
+                      <FileText size={16} />
+                      <span className="font-medium">
+                        PDF Analyzed: {msg.pdfName}
+                      </span>
+                    </div>
+                  )}
+                  <div
+                    className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md prose prose-invert max-w-none group relative ${
+                      msg.role === "user"
+                        ? "bg-zinc-800 border border-white/5"
+                        : "bg-white/5 border border-white/10 backdrop-blur-md"
+                    }`}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        details: ({ node, ...props }: any) => (
+                          <details
+                            className="mt-2 p-2 bg-black/20 rounded-lg cursor-pointer hover:bg-black/30 open:bg-black/40"
+                            {...props}
+                          />
+                        ),
+                        summary: ({ node, ...props }: any) => (
+                          <summary
+                            className="font-semibold text-pink-400 select-none outline-none"
+                            {...props}
+                          />
+                        ),
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+
+                    {msg.role === "model" && (
+                      <button
+                        onClick={() => saveToMistakes(msg)}
+                        className="absolute -right-8 top-2 p-1.5 text-zinc-600 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Save to Mistake Log"
+                      >
+                        <AlertTriangle size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
           {isLoading && (
-            <div className="flex justify-start">
-              <div className="bg-zinc-800/60 border border-white/5 rounded-2xl px-4 py-3 flex gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="w-1.5 h-1.5 bg-pink-400 rounded-full animate-bounce"
-                    style={{ animationDelay: `${i * 0.15}s` }}
-                  />
-                ))}
-              </div>
+            <div className="pl-14 text-sm text-zinc-500 animate-pulse flex items-center gap-2">
+              <Sparkles size={14} className="text-pink-500" /> Thinking...
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Area */}
-        <div className="p-4 border-t border-white/5">
-          {/* File Preview */}
+        {/* Input Bar */}
+        <div className="p-6">
           {activeFile && (
-            <div className="mb-2 flex items-center gap-2 px-3 py-2 bg-white/5 rounded-xl border border-white/10 text-xs text-zinc-400">
-              {activeFile.type === "image" ? (
-                <img
-                  src={activeFile.preview}
-                  alt="preview"
-                  className="h-8 w-8 object-cover rounded"
-                />
-              ) : (
-                <FileText size={16} className="text-pink-400" />
-              )}
-              <span className="flex-1 truncate">{activeFile.file.name}</span>
+            <div className="mb-2 flex items-center gap-2 bg-pink-900/40 border border-pink-500/40 px-3 py-2 rounded-lg text-xs text-pink-200 w-fit backdrop-blur-md shadow-lg">
+              <FileText size={14} />
+              <span>
+                Using Context: <strong>{activeFile.file.name}</strong>
+              </span>
               <button
                 onClick={() => setActiveFile(null)}
-                className="hover:text-white"
+                className="hover:text-white ml-2 bg-black/20 rounded-full p-0.5"
               >
-                <X size={14} />
+                <X size={12} />
               </button>
             </div>
           )}
-          <div className="flex items-end gap-2 bg-zinc-900/60 border border-white/10 rounded-2xl px-4 py-3">
+          <div className="flex items-center bg-zinc-900/80 border border-white/10 rounded-2xl px-2 py-2 shadow-2xl backdrop-blur-xl">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="text-zinc-500 hover:text-pink-400 transition-colors pb-0.5"
+              className="p-3 hover:bg-white/5 rounded-xl text-zinc-500 hover:text-pink-400"
+              title="Attach file or PDF"
             >
-              <Paperclip size={18} />
+              <Paperclip size={20} />
             </button>
             <input
-              ref={fileInputRef}
               type="file"
-              accept="image/*,application/pdf"
+              ref={fileInputRef}
               className="hidden"
+              accept="image/*,application/pdf"
               onChange={handleFileSelect}
             />
-            <textarea
+            <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onPaste={handleChatPaste}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendClick();
-                }
-              }}
-              placeholder={
-                activeFile ? "Ask about the file..." : "Ask Mika..."
+              onKeyDown={(e) =>
+                e.key === "Enter" && !e.shiftKey && handleSendClick()
               }
-              rows={1}
-              className="flex-1 bg-transparent outline-none resize-none text-sm text-zinc-100 placeholder-zinc-600 max-h-32"
+              onPaste={handleChatPaste}
+              placeholder={isListening ? "🎙 Listening..." : "Ask Mika..."}
+              className="flex-1 bg-transparent outline-none px-4 text-sm text-zinc-200 placeholder-zinc-600"
             />
+            {/* Mic */}
+            <button
+              onClick={startListening}
+              title={isListening ? "Stop listening" : "Voice input"}
+              className={`p-3 rounded-xl transition-colors ${
+                isListening
+                  ? "text-red-500 animate-pulse bg-red-500/10"
+                  : "text-zinc-500 hover:text-white"
+              }`}
+            >
+              <Mic size={20} />
+            </button>
             <button
               onClick={handleSendClick}
-              disabled={isLoading || (!input.trim() && !activeFile)}
-              className="pb-0.5 text-pink-400 disabled:text-zinc-700 hover:text-pink-300 transition-colors"
+              disabled={isLoading}
+              className="p-3 rounded-xl text-white bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg disabled:opacity-50 hover:brightness-110 transition-all"
             >
               <Send size={18} />
             </button>
@@ -760,76 +938,125 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* NOTES PANEL */}
+      {/* ─── RIGHT SIDEBAR ─── */}
       <AnimatePresence>
-        {isNotesOpen && (
+        {isRightSidebarOpen && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 320, opacity: 1 }}
+            animate={{ width: 400, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            className="h-full flex-shrink-0 border-l border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col z-20 overflow-hidden"
+            className="flex-shrink-0 border-l border-white/5 bg-zinc-950/90 backdrop-blur-2xl flex flex-col z-20 shadow-2xl overflow-hidden"
           >
-            <div className="p-4 border-b border-white/5 flex items-center justify-between">
-              <span className="font-semibold text-sm text-zinc-200">Notes</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleNewNote}
-                  className="text-zinc-400 hover:text-pink-400"
-                >
-                  <Plus size={16} />
-                </button>
-                <button
-                  onClick={() => setNotesOpen(false)}
-                  className="text-zinc-400 hover:text-white"
-                >
-                  <X size={16} />
+            {/* Header */}
+            <div className="h-16 border-b border-white/5 flex items-center justify-between px-5 bg-zinc-900/50 min-w-[400px]">
+              <span className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
+                {rightSidebarMode === "notebook" ? (
+                  <>
+                    <Edit3 size={14} className="text-pink-500" /> Notebook
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={14} className="text-yellow-500" />{" "}
+                    Mistake Log
+                  </>
+                )}
+              </span>
+              <div className="flex items-center gap-2">
+                {rightSidebarMode === "notebook" && !activeNoteId && (
+                  <button onClick={handleNewNote} title="New note">
+                    <Plus size={18} className="text-zinc-400 hover:text-white" />
+                  </button>
+                )}
+                <button onClick={() => setRightSidebarOpen(false)}>
+                  <X size={18} className="text-zinc-500 hover:text-white" />
                 </button>
               </div>
             </div>
-            <div className="flex-1 flex overflow-hidden">
-              {/* Note list */}
-              <div className="w-1/3 border-r border-white/5 overflow-y-auto custom-scrollbar">
-                {notes.map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => setActiveNoteId(n.id)}
-                    className={`p-3 cursor-pointer text-xs truncate border-b border-white/5 ${
-                      activeNoteId === n.id
-                        ? "bg-pink-500/10 text-pink-300"
-                        : "text-zinc-500 hover:bg-white/5"
-                    }`}
-                  >
-                    {n.title || "Untitled"}
-                  </div>
-                ))}
-              </div>
-              {/* Note editor */}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {activeNote ? (
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto min-w-[400px]">
+              {rightSidebarMode === "notebook" ? (
+                activeNoteId && activeNote ? (
                   <div className="flex flex-col h-full">
                     <input
-                      value={activeNote.title || ""}
+                      value={activeNote.title}
                       onChange={(e) =>
-                        updateNote(activeNote.id, { title: e.target.value, content: activeNote.content })
+                        updateNote(activeNoteId, { title: e.target.value })
                       }
-                      className="px-3 py-2 bg-transparent border-b border-white/5 text-sm font-medium outline-none placeholder-zinc-600"
+                      className="bg-transparent text-lg font-bold p-6 pb-2 outline-none text-zinc-100 placeholder-zinc-600 border-b border-white/5 mx-6"
                       placeholder="Title..."
                     />
                     <textarea
-                      value={activeNote.content || ""}
+                      value={activeNote.content}
                       onChange={(e) =>
-                        updateNote(activeNote.id, { title: activeNote.title, content: e.target.value })
+                        updateNote(activeNoteId, { content: e.target.value })
                       }
-                      className="flex-1 p-3 bg-transparent text-xs text-zinc-300 resize-none outline-none"
+                      className="flex-1 bg-transparent p-6 text-zinc-300 text-sm resize-none focus:outline-none"
                       placeholder="Type notes here..."
                     />
+                    <div className="p-4 border-t border-white/5">
+                      <button
+                        onClick={() => setActiveNoteId(null)}
+                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
+                      >
+                        <ChevronLeft size={16} /> Back to List
+                      </button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-xs text-zinc-600">
-                    Select or create a note
+                  <div className="p-3 space-y-1">
+                    {notes.length === 0 && (
+                      <div className="text-center text-zinc-500 mt-10 text-sm">
+                        No notes yet. Hit <strong>+</strong> to create one.
+                      </div>
+                    )}
+                    {notes.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => setActiveNoteId(n.id)}
+                        className="p-4 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer border border-transparent hover:border-white/5"
+                      >
+                        <h4 className="text-sm font-medium text-zinc-200 truncate">
+                          {n.title}
+                        </h4>
+                        <p className="text-xs text-zinc-500 mt-1 truncate">
+                          {n.content || "Empty note"}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </div>
+                )
+              ) : (
+                <div className="p-4 space-y-3">
+                  {mistakes.length === 0 && (
+                    <div className="text-center text-zinc-500 mt-10 text-sm">
+                      No mistakes logged yet.
+                      <br />
+                      Hover an AI reply and click ⚠️ to save one.
+                    </div>
+                  )}
+                  {mistakes.map((m) => (
+                    <div
+                      key={m.id}
+                      className="p-4 rounded-xl bg-yellow-900/10 border border-yellow-500/20 group relative"
+                    >
+                      <div className="text-xs text-yellow-500 font-bold mb-1 truncate">
+                        Q: {m.question}
+                      </div>
+                      <div className="text-sm text-zinc-300 line-clamp-4">
+                        {m.answer}
+                      </div>
+                      <button
+                        onClick={() => deleteMistake(m.id)}
+                        className="absolute top-2 right-2 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Remove"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.aside>
         )}

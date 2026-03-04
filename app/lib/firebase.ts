@@ -58,3 +58,20 @@ export const updateNoteContent = async (userId: string, noteId: string, content:
     updatedAt: serverTimestamp()
   });
 };
+
+// ... (Keep existing imports and config)
+
+// --- MISTAKE LOG FUNCTIONS ---
+
+export const saveMistake = async (userId: string, question: string, answer: string, topic: string = "General") => {
+  await addDoc(collection(db, "users", userId, "mistakes"), {
+    question,
+    answer,
+    topic,
+    createdAt: serverTimestamp()
+  });
+};
+
+export const deleteMistake = async (userId: string, mistakeId: string) => {
+  await deleteDoc(doc(db, "users", userId, "mistakes", mistakeId));
+};
