@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
+    console.log("GROQ KEY exists:", !!process.env.GROQ_API_KEY);
     const formData = await req.formData();
     const audio = formData.get("audio") as Blob;
 
