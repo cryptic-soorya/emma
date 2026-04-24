@@ -67,11 +67,14 @@ export default function Dashboard() {
   // Features
   const [streak, setStreak] = useState(0);
   const [timerActive, setTimerActive] = useState(false);
+  const [timerPhase, setTimerPhase] = useState<'work' | 'short' | 'long'>('work');
+  const [pomodoroCount, setPomodoroCount] = useState(0);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
-  
+  const [toast, setToast] = useState<string | null>(null);
+
   // Voice State
   const [isListening, setIsListening] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false); // Toggle for "Auto-Read"
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -79,13 +82,33 @@ export default function Dashboard() {
   // AUTH & LISTENERS
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) router.push("/");
-      else {
-        setUser(u);
-        const statsRef = doc(db, "users", u.uid, "stats", "general");
-        const statsSnap = await getDoc(statsRef);
-        if (statsSnap.exists()) setStreak(statsSnap.data().streak || 0);
-        else { setDoc(statsRef, { streak: 1, lastLogin: serverTimestamp() }); setStreak(1); }
+      if (!u) { router.push("/"); return; }
+      setUser(u);
+
+      const statsRef = doc(db, "users", u.uid, "stats", "general");
+      const statsSnap = await getDoc(statsRef);
+      const todayStr = new Date().toISOString().split('T')[0]; // "2026-04-25"
+
+      if (!statsSnap.exists()) {
+        await setDoc(statsRef, { streak: 1, lastLoginDate: todayStr });
+        setStreak(1);
+      } else {
+        const data = statsSnap.data();
+        const lastDate = data.lastLoginDate || '';
+        const currentStreak = data.streak || 1;
+
+        if (lastDate === todayStr) {
+          // Already logged in today — no change
+          setStreak(currentStreak);
+        } else {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+          const newStreak = lastDate === yesterdayStr ? currentStreak + 1 : 1;
+          setStreak(newStreak);
+          await updateDoc(statsRef, { streak: newStreak, lastLoginDate: todayStr });
+        }
       }
     });
     return () => unsub();
@@ -113,13 +136,40 @@ export default function Dashboard() {
 
   // TIMER
   useEffect(() => {
-    let interval: any;
-    if (timerActive && timeLeft > 0) interval = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    else if (timeLeft === 0) { setTimerActive(false); alert("Pomodoro Complete! 🌸"); setTimeLeft(25 * 60); }
-    return () => clearInterval(interval);
+    if (!timerActive || timeLeft > 0) {
+      const interval = timerActive ? setInterval(() => setTimeLeft(t => t - 1), 1000) : null;
+      return () => { if (interval) clearInterval(interval); };
+    }
+    // Phase complete
+    setTimerActive(false);
+    if (timerPhase === 'work') {
+      const newCount = pomodoroCount + 1;
+      setPomodoroCount(newCount);
+      if (newCount % 4 === 0) {
+        setTimerPhase('long');
+        setTimeLeft(15 * 60);
+        setToast(`${newCount} sessions done! Long break time — 15 min 🌸`);
+      } else {
+        setTimerPhase('short');
+        setTimeLeft(5 * 60);
+        setToast(`Focus session done! Short break — 5 min ✨`);
+      }
+    } else {
+      setTimerPhase('work');
+      setTimeLeft(25 * 60);
+      setToast("Break over! Back to work 📚");
+    }
   }, [timerActive, timeLeft]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const resetTimer = () => { setTimerActive(false); setTimerPhase('work'); setTimeLeft(25 * 60); setPomodoroCount(0); };
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+  const phaseLabel = timerPhase === 'work' ? 'Focus' : timerPhase === 'short' ? 'Break' : 'Long Break';
 
   // --- SMART VOICE INTERFACE ---
 // --- SMART VOICE INTERFACE ---
@@ -243,11 +293,8 @@ export default function Dashboard() {
         createdAt: serverTimestamp()
       });
 
-      // --- NEURAL VOICE OUTPUT ---
       if (isSpeaking && data.response) {
-        // Strip markdown so she doesn't say "Asterisk Asterisk bold..."
-        const cleanText = data.response
-        playNeuralTTS(cleanText);
+        playNeuralTTS(data.response);
       }
 
     } catch (e: any) {
@@ -261,12 +308,30 @@ export default function Dashboard() {
   const handleSendClick = () => performSend(input);
 
   // MISTAKE LOG
-  const saveToMistakes = async (msg: any) => {
-    const msgIndex = messages.findIndex(m => m.id === msg.id);
-    const question = msgIndex > 0 ? messages[msgIndex - 1].text : "Context Question";
-    await addDoc(collection(db, "users", user.uid, "mistakes"), { question, answer: msg.text, createdAt: serverTimestamp() });
-    alert("Saved to Mistake Log!");
-  };
+const saveToMistakes = async (msg: any) => {
+  const msgIndex = messages.findIndex(m => m.id === msg.id);
+  let question = msgIndex > 0 ? messages[msgIndex - 1].text : "Context Question";
+  
+  if (question.includes("Generate 3 NEET-style")) {
+    question = "NEET Quiz Revision";
+  }
+
+  try {
+    await addDoc(collection(db, "users", user.uid, "mistakes"), {
+      question,
+      answer: msg.text,
+      createdAt: serverTimestamp()
+    });
+    alert("Saved to mistake log!");
+  } catch (error) {
+    console.error("Error saving mistake:", error);
+    alert("Failed to save mistake.");
+  }
+};
+const handleGenerateQuiz = () => {
+  if (!activeSessionId) return alert("Start a chat or upload a PDF first! 🌸");
+  performSend("Generate 3 NEET-style Multiple Choice Questions based on our current topic or the attached document. Format them clearly. Hide the correct answers and explanations at the very bottom using the <details> tag.", true);
+};
   const deleteMistake = async (id: string) => { if(confirm("Remove?")) await deleteDoc(doc(db, "users", user.uid, "mistakes", id)); };
 
   // FILE HANDLING
@@ -299,6 +364,15 @@ export default function Dashboard() {
       <div className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300" style={{ background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(236, 72, 153, 0.08), transparent 40%)` }}/>
       <SakuraRain />
 
+      {/* TOAST */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div initial={{ opacity: 0, y: -20, x: '-50%' }} animate={{ opacity: 1, y: 0, x: '-50%' }} exit={{ opacity: 0, y: -20, x: '-50%' }} className="fixed top-5 left-1/2 z-50 px-5 py-3 rounded-2xl bg-zinc-900/95 border border-white/10 backdrop-blur-xl shadow-2xl text-sm text-white font-medium pointer-events-none">
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* LEFT SIDEBAR */}
       <motion.aside animate={{ width: isSidebarOpen ? 280 : 70 }} className="h-full flex-shrink-0 border-r border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col z-20 shadow-2xl">
         <div className="p-5 flex items-center justify-between">
@@ -325,8 +399,21 @@ export default function Dashboard() {
         <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md">
            <div className="flex items-center gap-4">
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
-             <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border ${timerActive ? 'border-emerald-500/30 text-emerald-400' : 'border-white/10 text-zinc-400'}`}><Timer size={14} /><span className="text-xs font-mono">{formatTime(timeLeft)}</span></button>
-             
+             <div className="flex items-center gap-1">
+               <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${timerActive ? (timerPhase === 'work' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : 'border-blue-500/30 text-blue-400 bg-blue-500/5') : 'border-white/10 text-zinc-400 hover:text-white'}`}>
+                 <Timer size={14} />
+                 <span className="text-xs font-mono">{formatTime(timeLeft)}</span>
+                 <span className="text-xs opacity-50">· {phaseLabel}</span>
+                 {pomodoroCount > 0 && <span className="text-xs text-orange-400 font-bold ml-0.5">×{pomodoroCount}</span>}
+               </button>
+               {!timerActive && (timerPhase !== 'work' || timeLeft !== 25 * 60) && (
+                 <button onClick={resetTimer} className="text-zinc-600 hover:text-zinc-400 transition-colors" title="Reset timer"><X size={12}/></button>
+               )}
+             </div>
+             <button onClick={handleGenerateQuiz} title="Generate Quiz" className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-colors">
+             <BrainCircuit size={14} />
+             <span className="text-xs font-bold">Quiz Me</span>
+            </button>
              {/* VOICE TOGGLE */}
              <button onClick={() => { setIsSpeaking(!isSpeaking); stopSpeaking(); }} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${isSpeaking ? 'bg-pink-500/10 border-pink-500/30 text-pink-400' : 'border-white/10 text-zinc-500'}`}>
                 {isSpeaking ? <Volume2 size={14}/> : <VolumeX size={14}/>}
@@ -335,8 +422,8 @@ export default function Dashboard() {
            </div>
            
            <div className="flex gap-2">
-             <button onClick={() => { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/10' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={20} /></button>
-             <button onClick={() => { setRightSidebarMode('notebook'); setRightSidebarOpen(true); }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={20} /></button>
+             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/10' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={20} /></button>
+             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={20} /></button>
            </div>
         </header>
 
@@ -354,13 +441,17 @@ export default function Dashboard() {
                   <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
                     {msg.image && <img src={msg.image} className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1" />}
                     {msg.isPdf && <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm"><FileText size={16} /><span className="font-medium">PDF Analyzed: {msg.pdfName}</span></div>}
-                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md prose prose-invert max-w-none group relative ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
-                       <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={{
-                         details: ({node, ...props}) => <details className="mt-2 p-2 bg-black/20 rounded-lg cursor-pointer transition-colors hover:bg-black/30" {...props} />,
-                         summary: ({node, ...props}) => <summary className="font-semibold text-pink-400 select-none outline-none" {...props} />
-                       }}>{msg.text}</ReactMarkdown>
-                       {/* SAVE TO MISTAKES */}
-                       {msg.role === 'model' && <button onClick={() => saveToMistakes(msg)} className="absolute -right-8 top-2 p-1.5 text-zinc-600 hover:text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"><AlertTriangle size={14} /></button>}
+                    <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md group relative ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
+                       <div className="markdown-content">
+                         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.text}</ReactMarkdown>
+                       </div>
+                       {msg.role === 'model' && (
+                         <div className="mt-2 pt-2 border-t border-white/5 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                           <button onClick={() => saveToMistakes(msg)} className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-yellow-400 transition-colors px-2 py-1 rounded-lg hover:bg-yellow-500/10">
+                             <AlertTriangle size={11} /> Save to mistakes
+                           </button>
+                         </div>
+                       )}
                     </div>
                   </div>
                </div>
@@ -430,8 +521,12 @@ export default function Dashboard() {
                    {mistakes.length === 0 && <div className="text-center text-zinc-500 mt-10">No mistakes logged yet.</div>}
                    {mistakes.map(m => (
                      <div key={m.id} className="p-4 rounded-xl bg-yellow-900/10 border border-yellow-500/20 group relative">
-                        <div className="text-xs text-yellow-500 font-bold mb-1">Context: {m.question.substring(0, 50)}...</div>
-                        <div className="text-sm text-zinc-300 prose prose-invert prose-sm"><ReactMarkdown>{m.answer}</ReactMarkdown></div>
+                        <div className="text-xs text-yellow-500 font-bold mb-2 pr-6">
+                          {m.question.length > 60 ? m.question.substring(0, 60) + '…' : m.question}
+                        </div>
+                        <div className="text-sm text-zinc-300 markdown-content">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{m.answer}</ReactMarkdown>
+                        </div>
                         <button onClick={() => deleteMistake(m.id)} className="absolute top-2 right-2 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><Trash2 size={12}/></button>
                      </div>
                    ))}

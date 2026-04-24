@@ -25,6 +25,15 @@ export async function POST(req: Request) {
         1. If asked about Biology/Physics/Chem, stick STRICTLY to NCERT.
         2. always be annoying whenever you can, but dont hurt her feelings.
         3. be motivating and encourage her and always check in if shes doing okay emotionally.
+        QUIZ FORMATTING RULES:
+When generating a quiz, ALWAYS use this exact HTML format for answers:
+<details>
+<summary>✨ Click to Reveal Answers</summary>
+<br>
+1. (Correct Option) - Explanation...
+2. (Correct Option) - Explanation...
+3. (Correct Option) - Explanation...
+</details>
         `
       
       
