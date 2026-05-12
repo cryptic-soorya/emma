@@ -70,3 +70,7 @@ body {
   flex-shrink: 0;
 }
 .markdown-content details[open] > summary::before { transform: rotate(90deg); }
+
+/* KaTeX math — inherit color so it reads well on dark backgrounds */
+.markdown-content .katex { color: inherit; font-size: 1em; }
+.markdown-content .katex-display { margin: 0.5rem 0; overflow-x: auto; }

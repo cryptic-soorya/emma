@@ -4,12 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
+import rehypeKatex from 'rehype-katex';
 import {
   Menu, Plus, MessageSquare, BookOpen, Edit3, Sparkles, Send, Trash2,
-  Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut, UploadCloud,
+  Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut,
   BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle, StopCircle,
-  CalendarDays, Check, RotateCcw
+  CalendarDays, Check, RotateCcw, Heart, Zap, Filter,
+  Smile, Users, GraduationCap, HeartHandshake
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -124,6 +127,9 @@ export default function Dashboard() {
   const [reviewQueue, setReviewQueue] = useState<any[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
   const [cardFlipped, setCardFlipped] = useState(false);
+  const [showOnlyUnchecked, setShowOnlyUnchecked] = useState(false);
+  type Personality = 'bestfriend' | 'studybuddy' | 'strictteacher' | 'therapist';
+  const [personality, setPersonality] = useState<Personality>('bestfriend');
 
   // Voice State
   const [isListening, setIsListening] = useState(false);
@@ -140,26 +146,27 @@ export default function Dashboard() {
 
       const statsRef = doc(db, "users", u.uid, "stats", "general");
       const statsSnap = await getDoc(statsRef);
-      const todayStr = new Date().toISOString().split('T')[0]; // "2026-04-25"
+      const todayStr = new Date().toISOString().split('T')[0];
 
-      const NEET_EXAM_DATE = '2026-05-02';
       if (!statsSnap.exists()) {
-        await setDoc(statsRef, { streak: 1, lastLoginDate: todayStr, examDate: NEET_EXAM_DATE });
+        await setDoc(statsRef, { streak: 1, lastLoginDate: todayStr, examDate: '' });
         setStreak(1);
-        setExamDate(NEET_EXAM_DATE);
       } else {
         const data = statsSnap.data();
         const lastDate = data.lastLoginDate || '';
         const currentStreak = data.streak || 1;
 
-        // Load exam date; fix if missing or already passed
+        // Load personality
+        if (data.personality) setPersonality(data.personality as Personality);
+
+        // Load exam date — if missing or already passed, clear it so Kate can set the new one
         const storedExam = data.examDate || '';
         const examIsValid = storedExam && new Date(storedExam + 'T00:00:00') >= new Date(todayStr + 'T00:00:00');
         if (examIsValid) {
           setExamDate(storedExam);
         } else {
-          setExamDate(NEET_EXAM_DATE);
-          await updateDoc(statsRef, { examDate: NEET_EXAM_DATE });
+          setExamDate('');
+          if (storedExam) await updateDoc(statsRef, { examDate: '' });
         }
 
         if (lastDate === todayStr) {
@@ -250,6 +257,35 @@ export default function Dashboard() {
     setExamDate(date);
     if (!user) return;
     await setDoc(doc(db, "users", user.uid, "stats", "general"), { examDate: date }, { merge: true });
+  };
+
+  const savePersonality = async (p: Personality) => {
+    setPersonality(p);
+    if (!user) return;
+    await setDoc(doc(db, "users", user.uid, "stats", "general"), { personality: p }, { merge: true });
+  };
+
+  const buildPanicMessage = () => {
+    const hour = new Date().getHours();
+    const timeContext =
+      hour < 5  ? "It's the middle of the night and I can't stop worrying" :
+      hour < 10 ? "It's morning and I'm already anxious before I've even started" :
+      hour < 14 ? "I've been staring at my books and I just cannot focus" :
+      hour < 18 ? "I've been studying for hours and nothing feels like it's sticking" :
+      hour < 22 ? "It's evening and I still don't feel ready at all" :
+                  "It's really late and I'm just spiraling";
+
+    const examContext = daysLeft !== null && daysLeft >= 0
+      ? `I only have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`
+      : "my exam is coming up really soon";
+
+    const progressContext =
+      doneCount === 0                        ? "and I feel like I haven't properly covered anything yet" :
+      doneCount < totalTopics / 3            ? "and I feel like I've barely scratched the surface" :
+      doneCount < (totalTopics * 2) / 3     ? "and there's still so much left to cover" :
+                                               "and even though I've covered most of it, I still feel like I'm going to blank out";
+
+    return `${timeContext}. ${examContext} ${progressContext}. I'm really overwhelmed and I don't know what to do. Please help me.`;
   };
 
   const toggleTopic = async (key: string) => {
@@ -358,7 +394,7 @@ export default function Dashboard() {
   
 
   // --- SEND LOGIC ---
-  const performSend = async (textToSend: string, isSystemCommand = false) => {
+  const performSend = async (textToSend: string, isSystemCommand = false, isPanic = false) => {
     if ((!textToSend.trim() && !activeFile) || isLoading || !user) return;
 
     let chatId = activeSessionId;
@@ -394,11 +430,14 @@ export default function Dashboard() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          message: textToSend, 
-          history: historyForApi, 
-          fileData: currentContext?.base64, 
-          mimeType: currentContext?.file.type 
+        body: JSON.stringify({
+          message: textToSend,
+          history: historyForApi,
+          fileData: currentContext?.base64,
+          mimeType: currentContext?.file.type,
+          daysLeft: daysLeft ?? undefined,
+          isPanic,
+          personality,
         }),
       });
       const data = await res.json();
@@ -444,9 +483,42 @@ const saveToMistakes = async (msg: any) => {
     setToast("Failed to save mistake.");
   }
 };
+const QUIZ_FORMAT_INSTRUCTION = `
+Format each question EXACTLY like this — each option on its own line, blank line between questions:
+
+**1. Question text here?**
+
+A. Option A
+B. Option B
+C. Option C
+D. Option D
+
+Do NOT write all options on one line. Do NOT use LaTeX ($...$) — write formulas in plain text.`;
+
 const handleGenerateQuiz = () => {
-  if (!activeSessionId) return alert("Start a chat or upload a PDF first! 🌸");
-  performSend("Generate 3 NEET-style Multiple Choice Questions based on our current topic or the attached document. Format them clearly. Hide the correct answers and explanations at the very bottom using the <details> tag.", true);
+  if (!activeSessionId) return alert("Start a chat or upload a PDF first!");
+  performSend(`Generate 3 NEET-style Multiple Choice Questions based on our current topic or the attached document.${QUIZ_FORMAT_INSTRUCTION}
+
+Put all answers at the very bottom inside a <details> block.`, true);
+};
+
+const handleBlitzQuiz = () => {
+  if (!activeSessionId) return alert("Start a chat first!");
+  performSend(`Generate 10 rapid-fire NEET-style MCQs on our current topic. Exam-level difficulty.${QUIZ_FORMAT_INSTRUCTION}
+
+Put all answers at the very bottom inside a <details> block.`, true);
+};
+
+const handlePanic = () => {
+  const msg = buildPanicMessage();
+  if (!activeSessionId) {
+    addDoc(collection(db, "users", user.uid, "chats"), { title: "SOS", createdAt: serverTimestamp() }).then(ref => {
+      setActiveSessionId(ref.id);
+      setTimeout(() => performSend(msg, false, true), 100);
+    });
+    return;
+  }
+  performSend(msg, false, true);
 };
   const deleteMistake = async (id: string) => { if(confirm("Remove?")) await deleteDoc(doc(db, "users", user.uid, "mistakes", id)); };
 
@@ -495,9 +567,32 @@ const handleGenerateQuiz = () => {
            {isSidebarOpen ? <span className="font-bold text-lg text-pink-400">Mika 2.0</span> : <span className="font-bold mx-auto text-pink-500">M</span>}
            <button onClick={() => setSidebarOpen(!isSidebarOpen)}><Menu size={20} className="text-zinc-500 hover:text-white"/></button>
         </div>
-        <div className="px-3 mb-4">
+        <div className="px-3 mb-3">
            <button onClick={() => { setActiveSessionId(null); setActiveFile(null); }} className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5"><Plus size={18} className="text-pink-500" />{isSidebarOpen && <span className="text-sm font-medium">New Session</span>}</button>
         </div>
+
+        {/* PERSONALITY SELECTOR */}
+        {isSidebarOpen && (() => {
+          const options: { id: Personality; label: string; icon: React.ReactNode; active: string; inactive: string }[] = [
+            { id: 'bestfriend',    label: 'Best Friend',    icon: <Smile size={11}/>,        active: 'bg-pink-500/20 text-pink-300 border-pink-500/30',    inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'studybuddy',   label: 'Study Buddy',    icon: <Users size={11}/>,         active: 'bg-blue-500/20 text-blue-300 border-blue-500/30',     inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'strictteacher',label: 'Strict Teacher', icon: <GraduationCap size={11}/>, active: 'bg-purple-500/20 text-purple-300 border-purple-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'therapist',    label: 'Calm Support',   icon: <HeartHandshake size={11}/>,active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+          ];
+          return (
+            <div className="px-3 mb-3">
+              <div className="text-[10px] text-zinc-600 uppercase tracking-wider mb-1.5 px-1">Mika's Mode</div>
+              <div className="grid grid-cols-2 gap-1">
+                {options.map(o => (
+                  <button key={o.id} onClick={() => savePersonality(o.id)}
+                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium border transition-all ${personality === o.id ? o.active : o.inactive}`}>
+                    {o.icon}{o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
            {sessions.map(s => (
              <div key={s.id} onClick={() => setActiveSessionId(s.id)} className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${activeSessionId === s.id ? 'bg-pink-500/10 border border-pink-500/20' : 'hover:bg-white/5 border border-transparent'}`}>
@@ -527,13 +622,21 @@ const handleGenerateQuiz = () => {
                )}
              </div>
              <button onClick={handleGenerateQuiz} title="Generate Quiz" className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-colors">
-             <BrainCircuit size={14} />
-             <span className="text-xs font-bold">Quiz Me</span>
-            </button>
+               <BrainCircuit size={14} />
+               <span className="text-xs font-bold">Quiz Me</span>
+             </button>
+             <button onClick={handleBlitzQuiz} title="10-question blitz quiz" className="flex items-center gap-2 px-3 py-1 rounded-full border border-yellow-500/30 text-yellow-400 hover:bg-yellow-500/10 transition-colors">
+               <Zap size={14} />
+               <span className="text-xs font-bold">Blitz</span>
+             </button>
              {/* VOICE TOGGLE */}
              <button onClick={() => { setIsSpeaking(!isSpeaking); stopSpeaking(); }} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${isSpeaking ? 'bg-pink-500/10 border-pink-500/30 text-pink-400' : 'border-white/10 text-zinc-500'}`}>
-                {isSpeaking ? <Volume2 size={14}/> : <VolumeX size={14}/>}
-                <span className="text-xs font-bold">{isSpeaking ? "Voice ON" : "Voice OFF"}</span>
+               {isSpeaking ? <Volume2 size={14}/> : <VolumeX size={14}/>}
+               <span className="text-xs font-bold">{isSpeaking ? "Voice ON" : "Voice OFF"}</span>
+             </button>
+             <button onClick={handlePanic} title="I'm overwhelmed — talk to Mika" className="flex items-center gap-2 px-3 py-1 rounded-full border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
+               <Heart size={14} />
+               <span className="text-xs font-bold">SOS</span>
              </button>
            </div>
            
@@ -548,6 +651,19 @@ const handleGenerateQuiz = () => {
              <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={20} /></button>
            </div>
         </header>
+
+        {/* CRASH MODE BANNER */}
+        {daysLeft !== null && daysLeft <= 7 && daysLeft >= 0 && (
+          <div className="px-6 py-2.5 flex items-center justify-between bg-gradient-to-r from-orange-500/10 to-red-500/5 border-b border-orange-500/20">
+            <div className="flex items-center gap-2 text-orange-400">
+              <Zap size={13} className="fill-orange-400/30" />
+              <span className="text-xs font-bold tracking-wide">CRUNCH MODE — {daysLeft} day{daysLeft !== 1 ? 's' : ''} left · Mika is in drill-sergeant mode</span>
+            </div>
+            <span className="text-xs text-orange-500 font-mono font-bold">
+              {daysLeft > 0 ? `${Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day` : 'Exam day!'}
+            </span>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
            {messages.length === 0 ? (
@@ -565,7 +681,7 @@ const handleGenerateQuiz = () => {
                     {msg.isPdf && <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm"><FileText size={16} /><span className="font-medium">PDF Analyzed: {msg.pdfName}</span></div>}
                     <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md group relative ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
                        <div className="markdown-content">
-                         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.text}</ReactMarkdown>
+                         <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>{msg.text}</ReactMarkdown>
                        </div>
                        {msg.role === 'model' && (
                          <div className="mt-2 pt-2 border-t border-white/5 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
@@ -667,7 +783,7 @@ const handleGenerateQuiz = () => {
                          <div className="p-4 rounded-xl bg-black/30 border border-white/10 flex-1 overflow-y-auto mb-4 custom-scrollbar">
                            <div className="text-xs text-pink-400 font-bold mb-2">Answer</div>
                            <div className="text-sm text-zinc-300 markdown-content">
-                             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{reviewQueue[reviewIndex]?.answer}</ReactMarkdown>
+                             <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>{reviewQueue[reviewIndex]?.answer}</ReactMarkdown>
                            </div>
                          </div>
                          <div className="flex gap-2">
@@ -698,7 +814,7 @@ const handleGenerateQuiz = () => {
                            {m.nextReviewDate && <span className="text-xs text-zinc-600 flex-shrink-0">{m.repetitions || 0}✓</span>}
                          </div>
                          <div className="text-sm text-zinc-300 markdown-content">
-                           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{m.answer}</ReactMarkdown>
+                           <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>{m.answer}</ReactMarkdown>
                          </div>
                          <button onClick={() => deleteMistake(m.id)} className="absolute top-2 right-2 text-zinc-600 hover:text-red-400 opacity-0 group-hover:opacity-100"><Trash2 size={12}/></button>
                        </div>
@@ -730,12 +846,25 @@ const handleGenerateQuiz = () => {
                        </div>
                        <div className="text-xs text-zinc-600 mt-1">{totalTopics - doneCount} chapters left</div>
                      </div>
+                     {/* Per-day target in crash mode */}
+                     {daysLeft !== null && daysLeft <= 7 && daysLeft > 0 && (
+                       <div className="mt-3 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-between">
+                         <span className="text-xs text-orange-400 font-medium">Daily target</span>
+                         <span className="text-sm font-black text-orange-300 tabular-nums">
+                           {Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day
+                         </span>
+                       </div>
+                     )}
                      {/* Date picker */}
+                     {!examDate && (
+                       <div className="mt-3 text-xs text-pink-400 font-medium animate-pulse">Set your new exam date below ↓</div>
+                     )}
                      <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
                        className="mt-3 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
                    </div>
                    {/* Subject tabs */}
-                   <div className="flex border-b border-white/5 flex-shrink-0">
+                   <div className="flex border-b border-white/5 flex-shrink-0 items-center">
+                     <div className="flex flex-1">
                      {Object.keys(NEET_TOPICS).map(subject => {
                        const subjectDone = NEET_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
                        const color = subject === 'Biology' ? 'emerald' : subject === 'Physics' ? 'blue' : 'purple';
@@ -747,12 +876,21 @@ const handleGenerateQuiz = () => {
                          </button>
                        );
                      })}
+                     </div>
+                     <button
+                       onClick={() => setShowOnlyUnchecked(v => !v)}
+                       title={showOnlyUnchecked ? "Show all chapters" : "Show only unchecked"}
+                       className={`px-2 py-2 border-l border-white/5 transition-colors flex-shrink-0 ${showOnlyUnchecked ? 'text-orange-400 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}
+                     >
+                       <Filter size={13} />
+                     </button>
                    </div>
                    {/* Chapter checklist */}
                    <div className="flex-1 overflow-y-auto custom-scrollbar">
                      {NEET_TOPICS[activeSubject].map((chapter, i) => {
                        const key = `${activeSubject}_${i}`;
                        const done = !!topicsDone[key];
+                       if (showOnlyUnchecked && done) return null;
                        return (
                          <button key={key} onClick={() => toggleTopic(key)}
                            className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all border-b border-white/[0.03] hover:bg-white/5 ${done ? 'opacity-50' : ''}`}>

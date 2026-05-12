@@ -1,4 +1,5 @@
 import "./globals.css"; // This MUST be here
+import "katex/dist/katex.min.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import CursorSparkles from "./components/CursorSparkles";
