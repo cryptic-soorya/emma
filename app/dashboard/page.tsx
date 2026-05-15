@@ -12,7 +12,8 @@ import {
   Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut,
   BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle, StopCircle,
   CalendarDays, Check, RotateCcw, Heart, Zap, Filter,
-  Smile, Users, GraduationCap, HeartHandshake
+  Smile, Users, GraduationCap, HeartHandshake,
+  BarChart2, Target, BookMarked, TrendingDown, ChevronRight
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -91,6 +92,37 @@ const NEET_TOPICS: Record<string, string[]> = {
   ],
 };
 
+const FORMULAS: Record<string, { category: string; items: string[] }[]> = {
+  Physics: [
+    { category: "Kinematics", items: ["v = u + at", "s = ut + ½at²", "v² = u² + 2as", "s = (u+v)t/2"] },
+    { category: "Force & Momentum", items: ["F = ma", "p = mv", "Impulse = FΔt = Δp", "Work = Fs cosθ"] },
+    { category: "Energy", items: ["KE = ½mv²", "PE = mgh", "Power = W/t = Fv", "η = W_out/W_in"] },
+    { category: "Circular & Gravity", items: ["a = v²/r = ω²r", "F = mv²/r", "g = GM/R²", "T² ∝ r³ (Kepler)"] },
+    { category: "SHM & Waves", items: ["T = 2π√(l/g)", "T = 2π√(m/k)", "v = fλ", "I ∝ A² ∝ 1/r²"] },
+    { category: "Electricity", items: ["V = IR", "P = VI = I²R = V²/R", "C = Q/V", "Series: R = R₁+R₂"] },
+    { category: "Optics", items: ["1/f = 1/v − 1/u", "m = −v/u", "n = sin i / sin r", "n = c/v"] },
+    { category: "Modern Physics", items: ["E = hf = hc/λ", "KE_max = hf − φ", "E = mc²", "λ = h/mv (de Broglie)"] },
+  ],
+  Chemistry: [
+    { category: "Mole Concept", items: ["n = m/M", "N = n × 6.022×10²³", "PV = nRT (R = 8.314)", "% = (mass/total)×100"] },
+    { category: "Solutions", items: ["M = n/V(L)", "m = n/w(kg)", "χ = n₁/(n₁+n₂)", "ppm = (m_solute/m_solution)×10⁶"] },
+    { category: "Colligative", items: ["ΔTb = Kb·m", "ΔTf = Kf·m", "π = MRT", "Relative lowering = χ_solute"] },
+    { category: "Kinetics", items: ["r = k[A]ⁿ", "t½ = 0.693/k (1st order)", "k = Ae^(−Ea/RT) (Arrhenius)", "t½ = 1/(k[A]₀) (2nd order)"] },
+    { category: "Equilibrium", items: ["Kc = [P]^p/[R]^r", "Kp = Kc(RT)^Δn", "Q < Kc: forward", "Le Chatelier's principle"] },
+    { category: "Electrochemistry", items: ["E°cell = E°cathode − E°anode", "ΔG° = −nFE°", "E = E° − (0.0592/n)log Q", "W = nFE"] },
+    { category: "Acids & Bases", items: ["pH = −log[H⁺]", "pOH = −log[OH⁻]", "pH + pOH = 14", "pH = pKa + log([A⁻]/[HA])"] },
+  ],
+  Biology: [
+    { category: "Cell Division", items: ["Mitosis: PMAT (2n→2n)", "Meiosis: crossing over in Prophase I", "S phase: DNA replication", "G1+S+G2+M = cell cycle"] },
+    { category: "DNA & Gene", items: ["A=T (2H bonds), G≡C (3H bonds)", "Chargaff: %A=%T, %G=%C", "Transcription: DNA→mRNA", "Translation: mRNA→protein (codons=3 bases)"] },
+    { category: "Photosynthesis", items: ["6CO₂+6H₂O → C₆H₁₂O₆+6O₂", "Light rxn: H₂O→O₂+ATP+NADPH (thylakoid)", "Calvin: CO₂+ATP+NADPH→G3P (stroma)", "C4: CO₂ fixed by PEP carboxylase"] },
+    { category: "Respiration", items: ["Glycolysis: Glucose→2 Pyruvate (2 ATP, cytoplasm)", "Krebs: 2 Acetyl-CoA→CO₂+8 NADH+2 FADH₂", "ETC: 34 ATP (inner mitochondrial membrane)", "Total aerobic: ~38 ATP per glucose"] },
+    { category: "Circulation", items: ["RA→RV→Pulmonary→Lungs→LA→LV→Aorta", "SA node: pacemaker of heart", "ABO: A(IAIA/IAi), B(IBIB/IBi), O(ii), AB(IAIB)", "Rh+: dominant, Erythroblastosis if Rh− mother"] },
+    { category: "Hormones", items: ["ADH: water reabsorption (DCT/CD)", "Insulin↓glucose | Glucagon↑glucose", "TSH→T3/T4 | ACTH→Cortisol | LH surge→Ovulation", "GH from anterior pituitary | Oxytocin from posterior"] },
+    { category: "Genetics", items: ["Mendel: Law of Segregation + Independent Assortment", "Test cross: unknown × recessive homozygous", "Incomplete dominance: 1:2:1 phenotype ratio", "Codominance: both alleles expressed (e.g. AB blood)"] },
+  ],
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
@@ -106,7 +138,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isRightSidebarOpen, setRightSidebarOpen] = useState(false);
-  const [rightSidebarMode, setRightSidebarMode] = useState<'notebook' | 'mistakes' | 'plan'>('notebook');
+  const [rightSidebarMode, setRightSidebarMode] = useState<'notebook' | 'mistakes' | 'plan' | 'analytics' | 'goals' | 'formulas'>('notebook');
   const [activeFile, setActiveFile] = useState<{file: File, preview: string, type: 'image' | 'pdf', base64: string} | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [dragActive, setDragActive] = useState(false);
@@ -130,6 +162,14 @@ export default function Dashboard() {
   const [showOnlyUnchecked, setShowOnlyUnchecked] = useState(false);
   type Personality = 'bestfriend' | 'studybuddy' | 'strictteacher' | 'therapist';
   const [personality, setPersonality] = useState<Personality>('bestfriend');
+
+  // Daily Goals
+  const [goals, setGoals] = useState<{id: string, text: string, done: boolean}[]>([]);
+  const [goalInput, setGoalInput] = useState('');
+  // Formula sheet subject tab
+  const [formulaSubject, setFormulaSubject] = useState('Physics');
+  // Plan sidebar sub-tab
+  const [planTab, setPlanTab] = useState<'revisionplan' | 'checklist'>('revisionplan');
 
   // Voice State
   const [isListening, setIsListening] = useState(false);
@@ -194,7 +234,20 @@ export default function Dashboard() {
     const unsubMistakes = onSnapshot(qMistakes, (snap) => setMistakes(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const topicsRef = doc(db, "users", user.uid, "stats", "topics");
     const unsubTopics = onSnapshot(topicsRef, (snap) => { if (snap.exists()) setTopicsDone(snap.data().done || {}); });
-    return () => { unsubChats(); unsubNotes(); unsubMistakes(); unsubTopics(); };
+    const todayStr2 = new Date().toISOString().split('T')[0];
+    const goalsRef = doc(db, "users", user.uid, "stats", "dailyGoals");
+    const unsubGoals = onSnapshot(goalsRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.date === todayStr2) {
+          setGoals(data.goals || []);
+        } else {
+          setGoals([]);
+          setDoc(goalsRef, { goals: [], date: todayStr2 });
+        }
+      }
+    });
+    return () => { unsubChats(); unsubNotes(); unsubMistakes(); unsubTopics(); unsubGoals(); };
   }, [user]);
 
   useEffect(() => {
@@ -522,6 +575,55 @@ const handlePanic = () => {
 };
   const deleteMistake = async (id: string) => { if(confirm("Remove?")) await deleteDoc(doc(db, "users", user.uid, "mistakes", id)); };
 
+  // --- GOALS ---
+  const saveGoals = async (newGoals: typeof goals) => {
+    if (!user) return;
+    const todayStr = new Date().toISOString().split('T')[0];
+    await setDoc(doc(db, "users", user.uid, "stats", "dailyGoals"), { goals: newGoals, date: todayStr });
+  };
+  const addGoal = async () => {
+    if (!goalInput.trim()) return;
+    const newGoals = [...goals, { id: Date.now().toString(), text: goalInput.trim(), done: false }];
+    setGoals(newGoals); setGoalInput(''); saveGoals(newGoals);
+  };
+  const toggleGoal = async (id: string) => {
+    const newGoals = goals.map(g => g.id === id ? { ...g, done: !g.done } : g);
+    setGoals(newGoals); saveGoals(newGoals);
+  };
+  const deleteGoal = async (id: string) => {
+    const newGoals = goals.filter(g => g.id !== id);
+    setGoals(newGoals); saveGoals(newGoals);
+  };
+
+  // --- ANALYTICS & WEAK TOPIC RADAR ---
+  const subjectStats = Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+    const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
+    return { subject, done, total: topics.length, pct: Math.round((done / topics.length) * 100) };
+  }).sort((a, b) => a.pct - b.pct);
+  const masteredMistakes = mistakes.filter(m => (m.repetitions || 0) >= 2).length;
+  const weakSubject = subjectStats[0];
+
+  // --- REVISION PLAN ---
+  const generateRevisionPlan = () => {
+    if (!daysLeft || daysLeft <= 0) return [];
+    const remaining: { subject: string; topic: string }[] = [];
+    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+      topics.forEach((topic, i) => {
+        if (!topicsDone[`${subject}_${i}`]) remaining.push({ subject, topic });
+      });
+    });
+    const perDay = Math.ceil(remaining.length / daysLeft);
+    const plan: { day: number; date: string; topics: typeof remaining }[] = [];
+    const today = new Date();
+    for (let d = 0; d < Math.min(daysLeft, 30); d++) {
+      const dayTopics = remaining.slice(d * perDay, (d + 1) * perDay);
+      if (!dayTopics.length) break;
+      const date = new Date(today); date.setDate(today.getDate() + d);
+      plan.push({ day: d + 1, date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), topics: dayTopics });
+    }
+    return plan;
+  };
+
   // FILE HANDLING
   const processFile = async (file: File) => {
     const isPdf = file.type === "application/pdf";
@@ -647,6 +749,9 @@ const handlePanic = () => {
                  <span className="text-xs font-bold">{daysLeft}d left</span>
                </button>
              )}
+             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/10' : 'text-zinc-500 hover:text-white'}`} title="Formula Sheet"><BookMarked size={20} /></button>
+             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'goals') setRightSidebarOpen(false); else { setRightSidebarMode('goals'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'goals' ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-500 hover:text-white'}`} title="Daily Goals"><Target size={20} /></button>
+             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'analytics') setRightSidebarOpen(false); else { setRightSidebarMode('analytics'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'analytics' ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-500 hover:text-white'}`} title="Progress Analytics"><BarChart2 size={20} /></button>
              <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/10' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={20} /></button>
              <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={20} /></button>
            </div>
@@ -729,7 +834,10 @@ const handlePanic = () => {
                <span className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
                  {rightSidebarMode === 'notebook' ? <><Edit3 size={14} className="text-pink-500"/> Notebook</>
                    : rightSidebarMode === 'mistakes' ? <><AlertTriangle size={14} className="text-yellow-500"/> Mistake Log</>
-                   : <><CalendarDays size={14} className="text-pink-400"/> Exam Plan</>}
+                   : rightSidebarMode === 'analytics' ? <><BarChart2 size={14} className="text-blue-400"/> Progress Analytics</>
+                   : rightSidebarMode === 'goals' ? <><Target size={14} className="text-emerald-400"/> Daily Goals</>
+                   : rightSidebarMode === 'formulas' ? <><BookMarked size={14} className="text-teal-400"/> Formula Sheet</>
+                   : <><CalendarDays size={14} className="text-pink-400"/> Revision Plan</>}
                </span>
                <div className="flex items-center gap-2">
                  {rightSidebarMode === 'notebook' && !activeNoteId && <button onClick={handleNewNote}><Plus size={18} className="text-zinc-400 hover:text-white"/></button>}
@@ -821,87 +929,306 @@ const handlePanic = () => {
                      ))}
                    </div>
                  )
-               ) : (
-                 // PLAN VIEW — exam countdown + NEET checklist
-                 <div className="flex flex-col h-full">
-                   {/* Countdown block */}
-                   <div className="p-6 text-center border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent">
-                     {daysLeft !== null && daysLeft >= 0 ? (
-                       <>
-                         <div className="text-7xl font-black text-white mb-1 tabular-nums">{daysLeft}</div>
-                         <div className="text-sm text-zinc-400 mb-1">days until your exam</div>
-                         {examDate && <div className="text-xs text-zinc-600">{new Date(examDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>}
-                       </>
-                     ) : (
-                       <div className="text-2xl font-bold text-pink-400 mb-1">Exam Day! 🌸</div>
-                     )}
-                     {/* Overall progress */}
-                     <div className="mt-4 mb-1">
-                       <div className="flex justify-between text-xs text-zinc-500 mb-1.5">
-                         <span>{doneCount} chapters revised</span>
-                         <span>{Math.round((doneCount / totalTopics) * 100)}%</span>
-                       </div>
-                       <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-                         <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-500 rounded-full" style={{ width: `${(doneCount / totalTopics) * 100}%` }}/>
-                       </div>
-                       <div className="text-xs text-zinc-600 mt-1">{totalTopics - doneCount} chapters left</div>
+               ) : rightSidebarMode === 'analytics' ? (
+                 // ANALYTICS + WEAK TOPIC RADAR
+                 <div className="p-5 space-y-6 overflow-y-auto custom-scrollbar h-full">
+                   {/* Streak + overview */}
+                   <div className="grid grid-cols-3 gap-3">
+                     <div className="rounded-xl bg-orange-500/10 border border-orange-500/20 p-3 text-center">
+                       <div className="text-2xl font-black text-orange-400 tabular-nums">{streak}</div>
+                       <div className="text-xs text-zinc-500 mt-0.5">Day Streak</div>
                      </div>
-                     {/* Per-day target in crash mode */}
-                     {daysLeft !== null && daysLeft <= 7 && daysLeft > 0 && (
-                       <div className="mt-3 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-between">
-                         <span className="text-xs text-orange-400 font-medium">Daily target</span>
-                         <span className="text-sm font-black text-orange-300 tabular-nums">
-                           {Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day
-                         </span>
-                       </div>
-                     )}
-                     {/* Date picker */}
-                     {!examDate && (
-                       <div className="mt-3 text-xs text-pink-400 font-medium animate-pulse">Set your new exam date below ↓</div>
-                     )}
-                     <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
-                       className="mt-3 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
-                   </div>
-                   {/* Subject tabs */}
-                   <div className="flex border-b border-white/5 flex-shrink-0 items-center">
-                     <div className="flex flex-1">
-                     {Object.keys(NEET_TOPICS).map(subject => {
-                       const subjectDone = NEET_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
-                       const color = subject === 'Biology' ? 'emerald' : subject === 'Physics' ? 'blue' : 'purple';
-                       return (
-                         <button key={subject} onClick={() => setActiveSubject(subject)}
-                           className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${activeSubject === subject ? `border-${color}-500 text-white` : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
-                           {subject}
-                           <span className="ml-1 opacity-50">{subjectDone}/{NEET_TOPICS[subject].length}</span>
-                         </button>
-                       );
-                     })}
+                     <div className="rounded-xl bg-pink-500/10 border border-pink-500/20 p-3 text-center">
+                       <div className="text-2xl font-black text-pink-400 tabular-nums">{doneCount}</div>
+                       <div className="text-xs text-zinc-500 mt-0.5">Topics Done</div>
                      </div>
-                     <button
-                       onClick={() => setShowOnlyUnchecked(v => !v)}
-                       title={showOnlyUnchecked ? "Show all chapters" : "Show only unchecked"}
-                       className={`px-2 py-2 border-l border-white/5 transition-colors flex-shrink-0 ${showOnlyUnchecked ? 'text-orange-400 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}
-                     >
-                       <Filter size={13} />
-                     </button>
+                     <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-center">
+                       <div className="text-2xl font-black text-yellow-400 tabular-nums">{mistakes.length}</div>
+                       <div className="text-xs text-zinc-500 mt-0.5">Mistakes</div>
+                     </div>
                    </div>
-                   {/* Chapter checklist */}
-                   <div className="flex-1 overflow-y-auto custom-scrollbar">
-                     {NEET_TOPICS[activeSubject].map((chapter, i) => {
-                       const key = `${activeSubject}_${i}`;
-                       const done = !!topicsDone[key];
-                       if (showOnlyUnchecked && done) return null;
-                       return (
-                         <button key={key} onClick={() => toggleTopic(key)}
-                           className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all border-b border-white/[0.03] hover:bg-white/5 ${done ? 'opacity-50' : ''}`}>
-                           <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${done ? 'bg-pink-500 border-pink-500' : 'border-zinc-700'}`}>
-                             {done && <Check size={9} className="text-white" strokeWidth={3}/>}
+
+                   {/* Subject completion bars */}
+                   <div>
+                     <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Subject Progress</div>
+                     <div className="space-y-3">
+                       {Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+                         const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
+                         const pct = Math.round((done / topics.length) * 100);
+                         const color = subject === 'Biology' ? 'from-emerald-500 to-teal-500' : subject === 'Physics' ? 'from-blue-500 to-indigo-500' : 'from-purple-500 to-pink-500';
+                         const bg = subject === 'Biology' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : subject === 'Physics' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400';
+                         return (
+                           <div key={subject}>
+                             <div className="flex justify-between items-center mb-1.5">
+                               <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${bg}`}>{subject}</span>
+                               <span className="text-xs text-zinc-400 tabular-nums">{done}/{topics.length} · {pct}%</span>
+                             </div>
+                             <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                               <div className={`h-full bg-gradient-to-r ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}/>
+                             </div>
                            </div>
-                           <span className={`text-xs ${done ? 'line-through text-zinc-600' : 'text-zinc-300'}`}>{chapter}</span>
-                         </button>
-                       );
-                     })}
+                         );
+                       })}
+                     </div>
                    </div>
+
+                   {/* Mistake mastery */}
+                   <div>
+                     <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Mistake Mastery</div>
+                     <div className="rounded-xl bg-white/5 border border-white/10 p-4 flex items-center gap-4">
+                       <div className="flex-1">
+                         <div className="flex justify-between text-xs text-zinc-500 mb-1.5">
+                           <span>Mastered (≥2 correct)</span>
+                           <span className="text-emerald-400 font-bold">{masteredMistakes}/{mistakes.length}</span>
+                         </div>
+                         <div className="h-2 bg-white/5 rounded-full overflow-hidden">
+                           <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all" style={{ width: mistakes.length ? `${Math.round((masteredMistakes/mistakes.length)*100)}%` : '0%' }}/>
+                         </div>
+                         <div className="flex justify-between text-xs text-zinc-600 mt-1.5">
+                           <span>{dueForReview.length} due for review</span>
+                           <span>{mistakes.length - masteredMistakes} still learning</span>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+
+                   {/* Weak topic radar */}
+                   <div>
+                     <div className="flex items-center gap-2 mb-3">
+                       <TrendingDown size={13} className="text-red-400"/>
+                       <div className="text-xs text-zinc-500 uppercase tracking-wider font-semibold">Weak Topic Radar</div>
+                     </div>
+                     {weakSubject && (
+                       <div className="rounded-xl bg-red-500/5 border border-red-500/20 p-4 mb-3">
+                         <div className="flex items-start gap-3">
+                           <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                             <TrendingDown size={14} className="text-red-400"/>
+                           </div>
+                           <div className="flex-1 min-w-0">
+                             <div className="text-sm font-semibold text-red-300 mb-0.5">Focus on {weakSubject.subject}</div>
+                             <div className="text-xs text-zinc-500">Only {weakSubject.pct}% complete — {weakSubject.total - weakSubject.done} chapters left</div>
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                     <div className="space-y-2">
+                       {subjectStats.map(({ subject, pct }) => (
+                         <div key={subject} className="flex items-center gap-3 text-xs">
+                           <div className={`w-2 h-2 rounded-full flex-shrink-0 ${pct < 33 ? 'bg-red-400' : pct < 66 ? 'bg-yellow-400' : 'bg-emerald-400'}`}/>
+                           <span className="text-zinc-400 flex-1">{subject}</span>
+                           <span className={`font-mono font-bold ${pct < 33 ? 'text-red-400' : pct < 66 ? 'text-yellow-400' : 'text-emerald-400'}`}>{pct}%</span>
+                           <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${pct < 33 ? 'bg-red-500/10 text-red-400' : pct < 66 ? 'bg-yellow-500/10 text-yellow-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                             {pct < 33 ? 'Weak' : pct < 66 ? 'Mid' : 'Strong'}
+                           </span>
+                         </div>
+                       ))}
+                     </div>
+                   </div>
+
+                   {/* Days left stat */}
+                   {daysLeft !== null && (
+                     <div className="rounded-xl bg-pink-500/5 border border-pink-500/20 p-4 flex items-center justify-between">
+                       <div>
+                         <div className="text-xs text-zinc-500 mb-0.5">Days until exam</div>
+                         <div className="text-2xl font-black text-pink-300 tabular-nums">{daysLeft}</div>
+                       </div>
+                       {daysLeft > 0 && (
+                         <div className="text-right">
+                           <div className="text-xs text-zinc-500 mb-0.5">Need per day</div>
+                           <div className="text-lg font-black text-orange-300 tabular-nums">{Math.ceil((totalTopics - doneCount) / daysLeft)}</div>
+                           <div className="text-xs text-zinc-600">chapters</div>
+                         </div>
+                       )}
+                     </div>
+                   )}
+                 </div>
+               ) : rightSidebarMode === 'goals' ? (
+                 // DAILY GOALS
+                 <div className="flex flex-col h-full">
+                   <div className="p-5 border-b border-white/5">
+                     <div className="text-xs text-zinc-500 mb-3">
+                       {goals.filter(g => g.done).length}/{goals.length} completed today
+                     </div>
+                     {goals.length > 0 && (
+                       <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
+                         <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all" style={{ width: `${goals.length ? (goals.filter(g=>g.done).length/goals.length)*100 : 0}%` }}/>
+                       </div>
+                     )}
+                     <div className="flex gap-2">
+                       <input
+                         value={goalInput}
+                         onChange={e => setGoalInput(e.target.value)}
+                         onKeyDown={e => e.key === 'Enter' && addGoal()}
+                         placeholder="Add a goal for today..."
+                         className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-zinc-200 outline-none focus:border-emerald-500/50 placeholder-zinc-600 transition-colors"
+                       />
+                       <button onClick={addGoal} className="px-3 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/30 transition-colors">
+                         <Plus size={16}/>
+                       </button>
+                     </div>
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar">
+                     {goals.length === 0 && (
+                       <div className="text-center text-zinc-600 mt-8 text-sm">No goals yet. Add one above!</div>
+                     )}
+                     {goals.map(goal => (
+                       <div key={goal.id} className={`flex items-start gap-3 p-3 rounded-xl border transition-all group ${goal.done ? 'bg-emerald-500/5 border-emerald-500/15 opacity-60' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
+                         <button onClick={() => toggleGoal(goal.id)} className={`w-5 h-5 rounded-md border flex-shrink-0 flex items-center justify-center transition-all mt-0.5 ${goal.done ? 'bg-emerald-500 border-emerald-500' : 'border-zinc-600 hover:border-emerald-500'}`}>
+                           {goal.done && <Check size={10} className="text-white" strokeWidth={3}/>}
+                         </button>
+                         <span className={`text-sm flex-1 leading-relaxed ${goal.done ? 'line-through text-zinc-500' : 'text-zinc-200'}`}>{goal.text}</span>
+                         <button onClick={() => deleteGoal(goal.id)} className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 flex-shrink-0 transition-all">
+                           <X size={13}/>
+                         </button>
+                       </div>
+                     ))}
+                   </div>
+                   {goals.length > 0 && goals.every(g => g.done) && (
+                     <div className="p-4 border-t border-white/5 text-center text-sm text-emerald-400 font-semibold">
+                       All done for today! 🌸
+                     </div>
+                   )}
+                 </div>
+               ) : rightSidebarMode === 'formulas' ? (
+                 // FORMULA QUICK REFERENCE
+                 <div className="flex flex-col h-full">
+                   <div className="flex border-b border-white/5 flex-shrink-0">
+                     {Object.keys(FORMULAS).map(subject => (
+                       <button key={subject} onClick={() => setFormulaSubject(subject)}
+                         className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${formulaSubject === subject ? 'border-teal-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+                         {subject}
+                       </button>
+                     ))}
+                   </div>
+                   <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+                     {FORMULAS[formulaSubject]?.map(section => (
+                       <div key={section.category}>
+                         <div className="text-xs text-teal-400 font-bold uppercase tracking-wider mb-2">{section.category}</div>
+                         <div className="space-y-1.5">
+                           {section.items.map((item, i) => (
+                             <div key={i} className="font-mono text-xs bg-zinc-900/80 border border-white/5 rounded-lg px-3 py-2 text-zinc-300 hover:border-teal-500/30 hover:text-white transition-colors cursor-default">
+                               {item}
+                             </div>
+                           ))}
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               ) : (
+                 // PLAN — revision plan + topic checklist (tabbed)
+                 <div className="flex flex-col h-full">
+                   {/* Sub-tabs */}
+                   <div className="flex border-b border-white/5 flex-shrink-0">
+                     <button onClick={() => setPlanTab('revisionplan')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'revisionplan' ? 'border-pink-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Revision Plan</button>
+                     <button onClick={() => setPlanTab('checklist')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'checklist' ? 'border-pink-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Topic Checklist</button>
+                   </div>
+
+                   {planTab === 'revisionplan' ? (() => {
+                     const plan = generateRevisionPlan();
+                     return (
+                       <>
+                         <div className="p-4 border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent text-center">
+                           {daysLeft !== null && daysLeft > 0 ? (
+                             <>
+                               <div className="text-4xl font-black text-white tabular-nums mb-1">{daysLeft}</div>
+                               <div className="text-xs text-zinc-500">days · {totalTopics - doneCount} chapters left</div>
+                               <div className="text-xs text-zinc-600 mt-0.5">~{Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day</div>
+                             </>
+                           ) : (
+                             <div className="text-base font-bold text-pink-400">Set exam date to generate plan</div>
+                           )}
+                           <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
+                             className="mt-3 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
+                         </div>
+                         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                           {plan.length === 0 ? (
+                             <div className="text-center text-zinc-600 text-sm mt-8">
+                               {daysLeft && daysLeft > 0 ? 'All topics covered! 🌸' : 'Set your exam date above to see your plan.'}
+                             </div>
+                           ) : plan.map(({ day, date, topics }) => (
+                             <div key={day} className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+                               <div className="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/5">
+                                 <span className="text-xs font-bold text-pink-300">Day {day}</span>
+                                 <span className="text-xs text-zinc-500">{date} · {topics.length} chapters</span>
+                               </div>
+                               <div className="p-3 space-y-1.5">
+                                 {topics.map(({ subject, topic }, i) => {
+                                   const subjectColor = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                   return (
+                                     <div key={i} className="flex items-center gap-2">
+                                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${subjectColor}`}>{subject[0]}</span>
+                                       <span className="text-xs text-zinc-400">{topic}</span>
+                                     </div>
+                                   );
+                                 })}
+                               </div>
+                             </div>
+                           ))}
+                         </div>
+                       </>
+                     );
+                   })() : (
+                     // CHECKLIST TAB
+                     <>
+                       <div className="p-4 text-center border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent">
+                         {daysLeft !== null && daysLeft >= 0 ? (
+                           <>
+                             <div className="text-5xl font-black text-white mb-1 tabular-nums">{daysLeft}</div>
+                             <div className="text-xs text-zinc-500 mb-1">days until exam</div>
+                             {examDate && <div className="text-xs text-zinc-600">{new Date(examDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>}
+                           </>
+                         ) : (
+                           <div className="text-xl font-bold text-pink-400 mb-1">Exam Day! 🌸</div>
+                         )}
+                         <div className="mt-3 mb-1">
+                           <div className="flex justify-between text-xs text-zinc-500 mb-1.5">
+                             <span>{doneCount} revised</span>
+                             <span>{Math.round((doneCount / totalTopics) * 100)}%</span>
+                           </div>
+                           <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                             <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-500 rounded-full" style={{ width: `${(doneCount / totalTopics) * 100}%` }}/>
+                           </div>
+                         </div>
+                         <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
+                           className="mt-2 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
+                       </div>
+                       <div className="flex border-b border-white/5 flex-shrink-0 items-center">
+                         <div className="flex flex-1">
+                           {Object.keys(NEET_TOPICS).map(subject => {
+                             const subjectDone = NEET_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
+                             const color = subject === 'Biology' ? 'emerald' : subject === 'Physics' ? 'blue' : 'purple';
+                             return (
+                               <button key={subject} onClick={() => setActiveSubject(subject)}
+                                 className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${activeSubject === subject ? `border-${color}-500 text-white` : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+                                 {subject}
+                                 <span className="ml-1 opacity-50">{subjectDone}/{NEET_TOPICS[subject].length}</span>
+                               </button>
+                             );
+                           })}
+                         </div>
+                         <button onClick={() => setShowOnlyUnchecked(v => !v)} title={showOnlyUnchecked ? "Show all" : "Show unchecked only"} className={`px-2 py-2 border-l border-white/5 transition-colors flex-shrink-0 ${showOnlyUnchecked ? 'text-orange-400 bg-orange-500/10' : 'text-zinc-600 hover:text-zinc-400'}`}>
+                           <Filter size={13}/>
+                         </button>
+                       </div>
+                       <div className="flex-1 overflow-y-auto custom-scrollbar">
+                         {NEET_TOPICS[activeSubject].map((chapter, i) => {
+                           const key = `${activeSubject}_${i}`;
+                           const done = !!topicsDone[key];
+                           if (showOnlyUnchecked && done) return null;
+                           return (
+                             <button key={key} onClick={() => toggleTopic(key)}
+                               className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all border-b border-white/[0.03] hover:bg-white/5 ${done ? 'opacity-50' : ''}`}>
+                               <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${done ? 'bg-pink-500 border-pink-500' : 'border-zinc-700'}`}>
+                                 {done && <Check size={9} className="text-white" strokeWidth={3}/>}
+                               </div>
+                               <span className={`text-xs ${done ? 'line-through text-zinc-600' : 'text-zinc-300'}`}>{chapter}</span>
+                             </button>
+                           );
+                         })}
+                       </div>
+                     </>
+                   )}
                  </div>
                )}
              </div>
