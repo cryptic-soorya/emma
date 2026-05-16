@@ -709,8 +709,8 @@ const handlePanic = () => {
 
       {/* CHAT AREA */}
       <main className="flex-1 flex flex-col relative z-10 bg-transparent min-w-0">
-        <header className="h-16 flex items-center justify-between px-6 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md">
-           <div className="flex items-center gap-4">
+        <header className="h-16 flex items-center justify-between px-4 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md overflow-x-auto gap-2">
+           <div className="flex items-center gap-2 flex-shrink-0">
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
              <div className="flex items-center gap-1">
                <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${timerActive ? (timerPhase === 'work' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : 'border-blue-500/30 text-blue-400 bg-blue-500/5') : 'border-white/10 text-zinc-400 hover:text-white'}`}>
@@ -742,7 +742,7 @@ const handlePanic = () => {
              </button>
            </div>
            
-           <div className="flex items-center gap-2">
+           <div className="flex items-center gap-2 flex-shrink-0">
              {daysLeft !== null && (
                <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-pink-300 bg-pink-500/10 border-pink-500/30' : 'text-zinc-400 border-white/10 hover:text-white'}`}>
                  <CalendarDays size={13}/>
