@@ -742,19 +742,6 @@ const handlePanic = () => {
              </button>
            </div>
            
-           <div className="flex items-center gap-2 flex-shrink-0">
-             {daysLeft !== null && (
-               <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`flex items-center gap-1.5 px-3 py-1 rounded-full border transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-pink-300 bg-pink-500/10 border-pink-500/30' : 'text-zinc-400 border-white/10 hover:text-white'}`}>
-                 <CalendarDays size={13}/>
-                 <span className="text-xs font-bold">{daysLeft}d left</span>
-               </button>
-             )}
-             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/10' : 'text-zinc-500 hover:text-white'}`} title="Formula Sheet"><BookMarked size={20} /></button>
-             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'goals') setRightSidebarOpen(false); else { setRightSidebarMode('goals'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'goals' ? 'text-emerald-400 bg-emerald-500/10' : 'text-zinc-500 hover:text-white'}`} title="Daily Goals"><Target size={20} /></button>
-             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'analytics') setRightSidebarOpen(false); else { setRightSidebarMode('analytics'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'analytics' ? 'text-blue-400 bg-blue-500/10' : 'text-zinc-500 hover:text-white'}`} title="Progress Analytics"><BarChart2 size={20} /></button>
-             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/10' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={20} /></button>
-             <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/10' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={20} /></button>
-           </div>
         </header>
 
         {/* CRASH MODE BANNER */}
@@ -825,6 +812,16 @@ const handlePanic = () => {
            </div>
         </div>
       </main>
+
+      {/* RIGHT ACTIVITY BAR — always visible */}
+      <div className="flex-shrink-0 w-12 h-full border-l border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col items-center py-4 gap-2 z-20">
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-pink-300 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Revision Plan"><CalendarDays size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/15' : 'text-zinc-500 hover:text-white'}`} title="Formula Sheet"><BookMarked size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'goals') setRightSidebarOpen(false); else { setRightSidebarMode('goals'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'goals' ? 'text-emerald-400 bg-emerald-500/15' : 'text-zinc-500 hover:text-white'}`} title="Daily Goals"><Target size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'analytics') setRightSidebarOpen(false); else { setRightSidebarMode('analytics'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'analytics' ? 'text-blue-400 bg-blue-500/15' : 'text-zinc-500 hover:text-white'}`} title="Progress Analytics"><BarChart2 size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/15' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={18} /></button>
+      </div>
 
       {/* RIGHT SIDEBAR (NOTEBOOK / MISTAKES) */}
       <AnimatePresence>
