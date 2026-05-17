@@ -13,7 +13,7 @@ import {
   BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle, StopCircle,
   CalendarDays, Check, RotateCcw, Heart, Zap, Filter,
   Smile, Users, GraduationCap, HeartHandshake,
-  BarChart2, Target, BookMarked, TrendingDown, ChevronRight
+  BarChart2, Target, BookMarked, TrendingDown, ChevronRight, GripVertical
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -170,6 +170,13 @@ export default function Dashboard() {
   const [formulaSubject, setFormulaSubject] = useState('Physics');
   // Plan sidebar sub-tab
   const [planTab, setPlanTab] = useState<'revisionplan' | 'checklist'>('revisionplan');
+  const [customRevisionPlan, setCustomRevisionPlan] = useState<{day: number; date: string; topics: {subject: string; topic: string}[]}[] | null>(null);
+  const [isEditingPlan, setIsEditingPlan] = useState(false);
+  const [planDragSrc, setPlanDragSrc] = useState<{dayIdx: number; topicIdx: number} | null>(null);
+  const [planDragOver, setPlanDragOver] = useState<{dayIdx: number; topicIdx: number} | null>(null);
+  const [planDragOverDay, setPlanDragOverDay] = useState<number | null>(null);
+  const [addToDay, setAddToDay] = useState<number | null>(null);
+  const [topicSearch, setTopicSearch] = useState('');
 
   // Voice State
   const [isListening, setIsListening] = useState(false);
@@ -219,6 +226,10 @@ export default function Dashboard() {
           setStreak(newStreak);
           await updateDoc(statsRef, { streak: newStreak, lastLoginDate: todayStr });
         }
+      }
+      const planSnap = await getDoc(doc(db, "users", u.uid, "stats", "revisionPlan"));
+      if (planSnap.exists() && planSnap.data().plan) {
+        setCustomRevisionPlan(planSnap.data().plan);
       }
     });
     return () => unsub();
@@ -622,6 +633,53 @@ const handlePanic = () => {
       plan.push({ day: d + 1, date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), topics: dayTopics });
     }
     return plan;
+  };
+
+  // EDITABLE REVISION PLAN
+  const saveCustomPlan = async (plan: {day: number; date: string; topics: {subject: string; topic: string}[]}[] | null) => {
+    if (!user) return;
+    await setDoc(doc(db, "users", user.uid, "stats", "revisionPlan"), { plan: plan ?? null });
+  };
+
+  const startEditingPlan = () => {
+    if (!customRevisionPlan) setCustomRevisionPlan(generateRevisionPlan());
+    setIsEditingPlan(true);
+  };
+
+  const resetPlan = async () => {
+    setCustomRevisionPlan(null);
+    setIsEditingPlan(false);
+    await saveCustomPlan(null);
+  };
+
+  const removePlanTopic = async (dayIdx: number, topicIdx: number) => {
+    if (!customRevisionPlan) return;
+    const newPlan = customRevisionPlan.map(d => ({ ...d, topics: [...d.topics] }));
+    newPlan[dayIdx].topics.splice(topicIdx, 1);
+    setCustomRevisionPlan(newPlan);
+    await saveCustomPlan(newPlan);
+  };
+
+  const getUnscheduledTopics = () => {
+    if (!customRevisionPlan) return [];
+    const scheduled = new Set(customRevisionPlan.flatMap(d => d.topics.map(t => `${t.subject}:::${t.topic}`)));
+    const result: {subject: string; topic: string}[] = [];
+    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+      topics.forEach(topic => {
+        if (!scheduled.has(`${subject}:::${topic}`)) result.push({ subject, topic });
+      });
+    });
+    return result;
+  };
+
+  const addTopicToDay = async (dayIdx: number, subject: string, topic: string) => {
+    if (!customRevisionPlan) return;
+    const newPlan = customRevisionPlan.map(d => ({ ...d, topics: [...d.topics] }));
+    newPlan[dayIdx].topics.push({ subject, topic });
+    setCustomRevisionPlan(newPlan);
+    await saveCustomPlan(newPlan);
+    setAddToDay(null);
+    setTopicSearch('');
   };
 
   // FILE HANDLING
@@ -1122,44 +1180,160 @@ const handlePanic = () => {
                    </div>
 
                    {planTab === 'revisionplan' ? (() => {
-                     const plan = generateRevisionPlan();
+                     const displayPlan = customRevisionPlan ?? generateRevisionPlan();
+                     const isCustom = !!customRevisionPlan;
                      return (
                        <>
-                         <div className="p-4 border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent text-center">
-                           {daysLeft !== null && daysLeft > 0 ? (
-                             <>
-                               <div className="text-4xl font-black text-white tabular-nums mb-1">{daysLeft}</div>
-                               <div className="text-xs text-zinc-500">days · {totalTopics - doneCount} chapters left</div>
-                               <div className="text-xs text-zinc-600 mt-0.5">~{Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day</div>
-                             </>
-                           ) : (
-                             <div className="text-base font-bold text-pink-400">Set exam date to generate plan</div>
-                           )}
+                         {/* Header */}
+                         <div className="p-4 border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent">
+                           <div className="text-center mb-3">
+                             {daysLeft !== null && daysLeft > 0 ? (
+                               <>
+                                 <div className="text-4xl font-black text-white tabular-nums mb-1">{daysLeft}</div>
+                                 <div className="text-xs text-zinc-500">days · {totalTopics - doneCount} chapters left</div>
+                                 <div className="text-xs text-zinc-600 mt-0.5">~{Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day</div>
+                               </>
+                             ) : (
+                               <div className="text-base font-bold text-pink-400">Set exam date to generate plan</div>
+                             )}
+                           </div>
                            <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
-                             className="mt-3 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
+                             className="w-full text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors mb-3" />
+                           <div className="flex gap-2">
+                             {isEditingPlan ? (
+                               <button onClick={() => { setIsEditingPlan(false); setPlanDragSrc(null); setPlanDragOver(null); setPlanDragOverDay(null); }}
+                                 className="flex-1 py-1.5 text-xs rounded-lg bg-pink-500/20 border border-pink-500/30 text-pink-300 hover:bg-pink-500/30 transition-colors flex items-center justify-center gap-1.5">
+                                 <Check size={11}/> Done Editing
+                               </button>
+                             ) : (
+                               <button onClick={startEditingPlan} disabled={!daysLeft || daysLeft <= 0}
+                                 className="flex-1 py-1.5 text-xs rounded-lg bg-white/5 border border-white/10 text-zinc-400 hover:text-white hover:border-white/20 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed">
+                                 <Edit3 size={11}/> {isCustom ? 'Edit Plan' : 'Customize Plan'}
+                               </button>
+                             )}
+                             {isCustom && !isEditingPlan && (
+                               <button onClick={resetPlan}
+                                 className="py-1.5 px-3 text-xs rounded-lg bg-white/5 border border-white/10 text-zinc-500 hover:text-red-400 hover:border-red-500/20 transition-colors flex items-center gap-1.5">
+                                 <RotateCcw size={11}/> Reset
+                               </button>
+                             )}
+                           </div>
+                           {isEditingPlan && (
+                             <p className="text-[10px] text-zinc-600 mt-2 text-center">Drag topics between days · ✕ to remove</p>
+                           )}
                          </div>
+
+                         {/* Plan list */}
                          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                           {plan.length === 0 ? (
+                           {displayPlan.length === 0 ? (
                              <div className="text-center text-zinc-600 text-sm mt-8">
                                {daysLeft && daysLeft > 0 ? 'All topics covered! 🌸' : 'Set your exam date above to see your plan.'}
                              </div>
-                           ) : plan.map(({ day, date, topics }) => (
-                             <div key={day} className="rounded-xl border border-white/5 bg-white/[0.02] overflow-hidden">
+                           ) : displayPlan.map(({ day, date, topics }, dayIdx) => (
+                             <div key={day}
+                               className={`rounded-xl border overflow-hidden transition-colors ${planDragOverDay === dayIdx && isEditingPlan ? 'border-pink-500/40 bg-pink-500/5' : 'border-white/5 bg-white/[0.02]'}`}
+                               onDragOver={e => { if (isEditingPlan) { e.preventDefault(); if (!planDragOver) setPlanDragOverDay(dayIdx); } }}
+                               onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPlanDragOverDay(null); }}
+                               onDrop={e => {
+                                 if (!isEditingPlan || !planDragSrc || !customRevisionPlan) return;
+                                 e.preventDefault();
+                                 setPlanDragOverDay(null);
+                                 const newPlan = customRevisionPlan.map(d => ({ ...d, topics: [...d.topics] }));
+                                 const [removed] = newPlan[planDragSrc.dayIdx].topics.splice(planDragSrc.topicIdx, 1);
+                                 newPlan[dayIdx].topics.push(removed);
+                                 setCustomRevisionPlan(newPlan);
+                                 saveCustomPlan(newPlan);
+                                 setPlanDragSrc(null);
+                               }}>
                                <div className="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/5">
                                  <span className="text-xs font-bold text-pink-300">Day {day}</span>
-                                 <span className="text-xs text-zinc-500">{date} · {topics.length} chapters</span>
+                                 <div className="flex items-center gap-2">
+                                   <span className="text-xs text-zinc-500">{date} · {topics.length} topic{topics.length !== 1 ? 's' : ''}</span>
+                                   {isEditingPlan && (
+                                     <button onClick={() => { setAddToDay(addToDay === dayIdx ? null : dayIdx); setTopicSearch(''); }}
+                                       className={`transition-colors ${addToDay === dayIdx ? 'text-pink-400' : 'text-zinc-600 hover:text-pink-400'}`} title="Add topic to this day">
+                                       <Plus size={13}/>
+                                     </button>
+                                   )}
+                                 </div>
                                </div>
-                               <div className="p-3 space-y-1.5">
-                                 {topics.map(({ subject, topic }, i) => {
+                               <div className="p-3 space-y-1.5 min-h-[32px]">
+                                 {topics.length === 0 && isEditingPlan && (
+                                   <div className="text-xs text-zinc-700 text-center py-2 border border-dashed border-white/10 rounded-lg">Drop topics here</div>
+                                 )}
+                                 {topics.map(({ subject, topic }, topicIdx) => {
+                                   const tIdx = NEET_TOPICS[subject]?.indexOf(topic) ?? -1;
+                                   const isDone = tIdx !== -1 && !!topicsDone[`${subject}_${tIdx}`];
+                                   const isSrc = planDragSrc?.dayIdx === dayIdx && planDragSrc?.topicIdx === topicIdx;
+                                   const isDragTarget = planDragOver?.dayIdx === dayIdx && planDragOver?.topicIdx === topicIdx;
                                    const subjectColor = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
                                    return (
-                                     <div key={i} className="flex items-center gap-2">
+                                     <div key={topicIdx}
+                                       className={`flex items-center gap-2 rounded-lg transition-all ${isEditingPlan ? 'bg-white/5 px-2 py-1.5 group/topic hover:bg-white/10' : ''} ${isSrc ? 'opacity-30' : ''} ${isDone && !isEditingPlan ? 'opacity-40' : ''} ${isDragTarget ? 'border-t-2 border-pink-400' : ''}`}
+                                       draggable={isEditingPlan}
+                                       onDragStart={() => { if (isEditingPlan) { setPlanDragSrc({ dayIdx, topicIdx }); setPlanDragOver(null); } }}
+                                       onDragEnd={() => { setPlanDragSrc(null); setPlanDragOver(null); setPlanDragOverDay(null); }}
+                                       onDragOver={e => { if (isEditingPlan) { e.preventDefault(); e.stopPropagation(); setPlanDragOver({ dayIdx, topicIdx }); setPlanDragOverDay(null); } }}
+                                       onDrop={e => {
+                                         if (!isEditingPlan || !planDragSrc || !customRevisionPlan) return;
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         const newPlan = customRevisionPlan.map(d => ({ ...d, topics: [...d.topics] }));
+                                         const [removed] = newPlan[planDragSrc.dayIdx].topics.splice(planDragSrc.topicIdx, 1);
+                                         let insertIdx = topicIdx;
+                                         if (planDragSrc.dayIdx === dayIdx && planDragSrc.topicIdx < topicIdx) insertIdx = Math.max(0, insertIdx - 1);
+                                         newPlan[dayIdx].topics.splice(insertIdx, 0, removed);
+                                         setCustomRevisionPlan(newPlan);
+                                         saveCustomPlan(newPlan);
+                                         setPlanDragSrc(null);
+                                         setPlanDragOver(null);
+                                         setPlanDragOverDay(null);
+                                       }}>
+                                       {isEditingPlan && <GripVertical size={12} className="text-zinc-600 cursor-grab flex-shrink-0"/>}
                                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${subjectColor}`}>{subject[0]}</span>
-                                       <span className="text-xs text-zinc-400">{topic}</span>
+                                       <span className={`text-xs flex-1 leading-tight ${isDone ? 'line-through text-zinc-600' : 'text-zinc-400'}`}>{topic}</span>
+                                       {isDone && !isEditingPlan && <Check size={9} className="text-emerald-500 flex-shrink-0"/>}
+                                       {isEditingPlan && (
+                                         <button onClick={() => removePlanTopic(dayIdx, topicIdx)}
+                                           className="opacity-0 group-hover/topic:opacity-100 text-zinc-700 hover:text-red-400 flex-shrink-0 transition-all">
+                                           <X size={11}/>
+                                         </button>
+                                       )}
                                      </div>
                                    );
                                  })}
                                </div>
+                               {/* Add topic picker */}
+                               {isEditingPlan && addToDay === dayIdx && (() => {
+                                 const unscheduled = getUnscheduledTopics().filter(t =>
+                                   !topicSearch || t.topic.toLowerCase().includes(topicSearch.toLowerCase()) || t.subject.toLowerCase().includes(topicSearch.toLowerCase())
+                                 );
+                                 return (
+                                   <div className="border-t border-white/5 p-3">
+                                     <input
+                                       autoFocus
+                                       value={topicSearch}
+                                       onChange={e => setTopicSearch(e.target.value)}
+                                       placeholder="Search topics to add..."
+                                       className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-pink-500/40 placeholder-zinc-600 mb-2"
+                                     />
+                                     <div className="max-h-40 overflow-y-auto space-y-0.5 custom-scrollbar">
+                                       {unscheduled.length === 0 ? (
+                                         <div className="text-xs text-zinc-600 text-center py-3">All topics are already scheduled!</div>
+                                       ) : unscheduled.map(({ subject, topic }, i) => {
+                                         const sc = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                         return (
+                                           <button key={i} onClick={() => addTopicToDay(dayIdx, subject, topic)}
+                                             className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-left">
+                                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold flex-shrink-0 ${sc}`}>{subject[0]}</span>
+                                             <span className="text-xs text-zinc-300 flex-1 leading-tight">{topic}</span>
+                                           </button>
+                                         );
+                                       })}
+                                     </div>
+                                   </div>
+                                 );
+                               })()}
                              </div>
                            ))}
                          </div>
