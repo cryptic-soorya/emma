@@ -8,11 +8,11 @@ import { useRouter } from "next/navigation";
 import { auth } from "../lib/firebase";
 
 const quotes = [
-  "YOU GOT THIS GIRLFRIEND! 🌸✨",
-  "I'm soooo damn prod of you! Keep going! 💖",
-  "NIFT or NEET, you're gonna SLAY them both! 🧬🔥",
-  "Keep the streak going and don't give up! 🚀💪",
-  "You are and have been working hard! Proud of you babes! 🌟😊",
+  "You've got this. Every session brings you closer. 🔥✨",
+  "Hard work compounds. Keep showing up! 💪🚀",
+  "The grind you put in today is the gap you create tomorrow. ⚡",
+  "Progress over perfection. Keep the streak alive! 🌟",
+  "You're building something great — one session at a time. 🎯💥",
 ];
 
 export default function Landing() {
