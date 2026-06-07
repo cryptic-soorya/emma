@@ -13,9 +13,11 @@ import {
   BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle, StopCircle,
   CalendarDays, Check, RotateCcw, Heart, Zap, Filter,
   Smile, Users, GraduationCap, HeartHandshake,
-  BarChart2, Target, BookMarked, TrendingDown, ChevronRight, GripVertical
+  BarChart2, Target, BookMarked, TrendingDown, ChevronRight, GripVertical,
+  ClipboardList
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 // Firebase
 import { auth, db } from "../lib/firebase"; 
@@ -770,6 +772,10 @@ const handlePanic = () => {
         <header className="h-16 flex items-center justify-between px-4 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md overflow-x-auto gap-2">
            <div className="flex items-center gap-2 flex-shrink-0">
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
+             <Link href="/exam" className="flex items-center gap-1.5 text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 hover:bg-blue-500/20 transition-colors" title="NEET Exam Simulator">
+               <ClipboardList size={14} />
+               <span className="text-xs font-bold">Exam</span>
+             </Link>
              <div className="flex items-center gap-1">
                <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${timerActive ? (timerPhase === 'work' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : 'border-blue-500/30 text-blue-400 bg-blue-500/5') : 'border-white/10 text-zinc-400 hover:text-white'}`}>
                  <Timer size={14} />

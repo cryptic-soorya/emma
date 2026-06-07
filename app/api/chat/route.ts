@@ -110,7 +110,7 @@ RULES:
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = process.env.GEMINI_API_KEY_MIKA || process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: "API Key missing in .env.local" }, { status: 500 });
     }
