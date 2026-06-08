@@ -89,12 +89,12 @@ interface UploadedFile {
 }
 
 async function uploadPdf(
-  base64: string,
+  buffer: Buffer,
   displayName: string,
   fileManager: GoogleAIFileManager
 ): Promise<UploadedFile> {
   const tmpPath = path.join(os.tmpdir(), `${crypto.randomUUID()}.pdf`);
-  await fs.writeFile(tmpPath, Buffer.from(base64, 'base64'));
+  await fs.writeFile(tmpPath, buffer);
   try {
     const uploadResult = await fileManager.uploadFile(tmpPath, {
       mimeType: 'application/pdf',
@@ -235,19 +235,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
 
-    const { questionPdfBase64, answerKeyPdfBase64 } = await req.json();
-    if (!questionPdfBase64 || !answerKeyPdfBase64) {
-      return NextResponse.json({ error: 'Missing PDF data' }, { status: 400 });
+    const body = await req.json();
+    const { questionPdfUrl, answerKeyPdfUrl, questionPdfBase64, answerKeyPdfBase64 } = body;
+
+    // Prefer URL-based input (Firebase Storage). Falls back to base64 for local dev.
+    let questionBuffer: Buffer;
+    let answerKeyBuffer: Buffer;
+    if (questionPdfUrl && answerKeyPdfUrl) {
+      console.log('Fetching PDFs from Firebase Storage URLs...');
+      const fetchStart = Date.now();
+      const [qResp, aResp] = await Promise.all([fetch(questionPdfUrl), fetch(answerKeyPdfUrl)]);
+      if (!qResp.ok) return NextResponse.json({ error: `Question PDF fetch failed: ${qResp.status}` }, { status: 400 });
+      if (!aResp.ok) return NextResponse.json({ error: `Answer key fetch failed: ${aResp.status}` }, { status: 400 });
+      const [qAb, aAb] = await Promise.all([qResp.arrayBuffer(), aResp.arrayBuffer()]);
+      questionBuffer = Buffer.from(qAb);
+      answerKeyBuffer = Buffer.from(aAb);
+      console.log(`PDFs fetched in ${((Date.now() - fetchStart) / 1000).toFixed(1)}s (qp: ${(questionBuffer.length / 1024 / 1024).toFixed(1)} MB, ak: ${(answerKeyBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
+    } else if (questionPdfBase64 && answerKeyPdfBase64) {
+      questionBuffer = Buffer.from(questionPdfBase64, 'base64');
+      answerKeyBuffer = Buffer.from(answerKeyPdfBase64, 'base64');
+    } else {
+      return NextResponse.json({ error: 'Missing PDF data — provide questionPdfUrl + answerKeyPdfUrl or base64 fallback' }, { status: 400 });
     }
 
     const fileManager = new GoogleAIFileManager(apiKey);
 
-    // Upload both PDFs once, then run all 4 chunks in parallel against the URIs.
     console.log('Uploading PDFs to Gemini File API...');
     const uploadStart = Date.now();
     [questionFile, answerKeyFile] = await Promise.all([
-      uploadPdf(questionPdfBase64, 'qp.pdf', fileManager),
-      uploadPdf(answerKeyPdfBase64, 'ak.pdf', fileManager),
+      uploadPdf(questionBuffer, 'qp.pdf', fileManager),
+      uploadPdf(answerKeyBuffer, 'ak.pdf', fileManager),
     ]);
     console.log(`Uploads ready in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
 
