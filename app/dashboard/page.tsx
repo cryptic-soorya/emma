@@ -8,121 +8,64 @@ import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
 import rehypeKatex from 'rehype-katex';
 import {
-  Menu, Plus, MessageSquare, BookOpen, Edit3, Sparkles, Send, Trash2,
+  Menu, Plus, MessageSquare, BookOpen, Edit3, Send, Trash2,
   Paperclip, X, FileText, ChevronLeft, Flame, Timer, LogOut,
   BrainCircuit, Mic, Volume2, VolumeX, AlertTriangle, StopCircle,
-  CalendarDays, Check, RotateCcw, Heart, Zap, Filter,
-  Smile, Users, GraduationCap, HeartHandshake,
-  BarChart2, Target, BookMarked, TrendingDown, ChevronRight, GripVertical,
-  ClipboardList
+  CalendarDays, Check, RotateCcw, Zap, Filter,
+  MessageCircle, Users, GraduationCap, Waves,
+  BarChart2, Target, Crosshair, TrendingDown, ChevronRight, GripVertical
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 // Firebase
-import { auth, db } from "../lib/firebase"; 
+import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { 
-  collection, addDoc, query, orderBy, onSnapshot, 
-  deleteDoc, doc, updateDoc, serverTimestamp, setDoc, getDoc 
+import {
+  collection, addDoc, query, orderBy, onSnapshot,
+  deleteDoc, doc, updateDoc, serverTimestamp, setDoc, getDoc
 } from "firebase/firestore";
 
 // Helpers
 import { compressImage, readPdfBase64 } from "../lib/compress";
 import { playNeuralTTS, stopAllSpeech } from "../lib/tts"; // IMPORT NEW VOICE ENGINE
+import type { StudentBehaviorProfile, CATSection } from "../lib/catTypes";
 
 import "../globals.css";
 
-// --- SAKURA ---
-const SakuraRain = () => {
-  const [petals, setPetals] = useState<any[]>([]);
-  useEffect(() => {
-    setPetals(Array.from({ length: 15 }).map((_, i) => ({
-      id: i, left: `${Math.random() * 100}%`, delay: Math.random() * 5, duration: 15 + Math.random() * 10
-    })));
-  }, []);
-  if (!petals.length) return null;
-  return (
-    <div className="fixed inset-0 z-[1] pointer-events-none overflow-hidden">
-      {petals.map(p => (
-        <motion.div key={p.id} initial={{ y: -50, opacity: 0 }} animate={{ y: "110vh", opacity: [0, 0.4, 0], rotate: 360, x: [0, 20, -20, 0] }} transition={{ duration: p.duration, repeat: Infinity, delay: p.delay, ease: "linear" }} className="absolute text-pink-400/20 text-xl" style={{ left: p.left }}>🌸</motion.div>
-      ))}
-    </div>
-  );
-};
-
-const NEET_TOPICS: Record<string, string[]> = {
-  Biology: [
-    'The Living World','Biological Classification','Plant Kingdom','Animal Kingdom',
-    'Morphology of Flowering Plants','Anatomy of Flowering Plants','Structural Organisation in Animals',
-    'Cell: The Unit of Life','Biomolecules','Cell Cycle and Cell Division',
-    'Transport in Plants','Mineral Nutrition','Photosynthesis in Higher Plants',
-    'Respiration in Plants','Plant Growth and Development',
-    'Digestion and Absorption','Breathing and Exchange of Gases',
-    'Body Fluids and Circulation','Excretory Products and Elimination',
-    'Locomotion and Movement','Neural Control and Coordination','Chemical Coordination',
-    'Reproduction in Organisms','Sexual Reproduction in Flowering Plants',
-    'Human Reproduction','Reproductive Health',
-    'Principles of Inheritance and Variation','Molecular Basis of Inheritance','Evolution',
-    'Human Health and Disease','Microbes in Human Welfare',
-    'Biotechnology: Principles and Processes','Biotechnology and its Applications',
-    'Organisms and Populations','Ecosystem','Biodiversity and Conservation','Environmental Issues',
+const CAT_TOPICS: Record<string, string[]> = {
+  VARC: [
+    'RC — Inference Based Questions',
+    'RC — Vocabulary in Context',
+    "RC — Tone & Author's Attitude",
+    'Para Jumbles',
+    'Para Summary',
+    'Odd Sentence Out',
   ],
-  Physics: [
-    'Units and Measurement','Motion in a Straight Line','Motion in a Plane',
-    'Laws of Motion','Work, Energy and Power','System of Particles and Rotational Motion',
-    'Gravitation','Mechanical Properties of Solids','Mechanical Properties of Fluids',
-    'Thermal Properties of Matter','Thermodynamics','Kinetic Theory',
-    'Oscillations','Waves','Electric Charges and Fields',
-    'Electrostatic Potential and Capacitance','Current Electricity',
-    'Moving Charges and Magnetism','Magnetism and Matter',
-    'Electromagnetic Induction','Alternating Current','Electromagnetic Waves',
-    'Ray Optics and Optical Instruments','Wave Optics',
-    'Dual Nature of Radiation and Matter','Atoms','Nuclei','Semiconductor Electronics',
+  DILR: [
+    'Grid-based DI',
+    'Bar/Line Graph DI',
+    'Table-based DI',
+    'Linear Seating Arrangement',
+    'Circular Seating Arrangement',
+    'Scheduling Puzzles',
+    'Games & Tournaments',
   ],
-  Chemistry: [
-    'Some Basic Concepts of Chemistry','Structure of Atom',
-    'Classification of Elements and Periodicity','Chemical Bonding and Molecular Structure',
-    'States of Matter','Chemical Thermodynamics','Equilibrium','Redox Reactions',
-    'Hydrogen','s-Block Elements','p-Block Elements (13 & 14)',
-    'Organic Chemistry: Basic Principles','Hydrocarbons','Environmental Chemistry',
-    'Solid State','Solutions','Electrochemistry','Chemical Kinetics','Surface Chemistry',
-    'General Principles of Isolation of Elements','d and f Block Elements',
-    'Coordination Compounds','Haloalkanes and Haloarenes',
-    'Alcohols, Phenols and Ethers','Aldehydes, Ketones and Carboxylic Acids',
-    'Amines','Biomolecules','Polymers','Chemistry in Everyday Life',
+  QA: [
+    'Arithmetic',
+    'Algebra',
+    'Geometry & Mensuration',
+    'Number Theory',
+    'Permutation & Combination',
+    'Probability',
+    'Modern Math (Sets, Functions, Logs)',
   ],
 };
 
-const FORMULAS: Record<string, { category: string; items: string[] }[]> = {
-  Physics: [
-    { category: "Kinematics", items: ["v = u + at", "s = ut + ½at²", "v² = u² + 2as", "s = (u+v)t/2"] },
-    { category: "Force & Momentum", items: ["F = ma", "p = mv", "Impulse = FΔt = Δp", "Work = Fs cosθ"] },
-    { category: "Energy", items: ["KE = ½mv²", "PE = mgh", "Power = W/t = Fv", "η = W_out/W_in"] },
-    { category: "Circular & Gravity", items: ["a = v²/r = ω²r", "F = mv²/r", "g = GM/R²", "T² ∝ r³ (Kepler)"] },
-    { category: "SHM & Waves", items: ["T = 2π√(l/g)", "T = 2π√(m/k)", "v = fλ", "I ∝ A² ∝ 1/r²"] },
-    { category: "Electricity", items: ["V = IR", "P = VI = I²R = V²/R", "C = Q/V", "Series: R = R₁+R₂"] },
-    { category: "Optics", items: ["1/f = 1/v − 1/u", "m = −v/u", "n = sin i / sin r", "n = c/v"] },
-    { category: "Modern Physics", items: ["E = hf = hc/λ", "KE_max = hf − φ", "E = mc²", "λ = h/mv (de Broglie)"] },
-  ],
-  Chemistry: [
-    { category: "Mole Concept", items: ["n = m/M", "N = n × 6.022×10²³", "PV = nRT (R = 8.314)", "% = (mass/total)×100"] },
-    { category: "Solutions", items: ["M = n/V(L)", "m = n/w(kg)", "χ = n₁/(n₁+n₂)", "ppm = (m_solute/m_solution)×10⁶"] },
-    { category: "Colligative", items: ["ΔTb = Kb·m", "ΔTf = Kf·m", "π = MRT", "Relative lowering = χ_solute"] },
-    { category: "Kinetics", items: ["r = k[A]ⁿ", "t½ = 0.693/k (1st order)", "k = Ae^(−Ea/RT) (Arrhenius)", "t½ = 1/(k[A]₀) (2nd order)"] },
-    { category: "Equilibrium", items: ["Kc = [P]^p/[R]^r", "Kp = Kc(RT)^Δn", "Q < Kc: forward", "Le Chatelier's principle"] },
-    { category: "Electrochemistry", items: ["E°cell = E°cathode − E°anode", "ΔG° = −nFE°", "E = E° − (0.0592/n)log Q", "W = nFE"] },
-    { category: "Acids & Bases", items: ["pH = −log[H⁺]", "pOH = −log[OH⁻]", "pH + pOH = 14", "pH = pKa + log([A⁻]/[HA])"] },
-  ],
-  Biology: [
-    { category: "Cell Division", items: ["Mitosis: PMAT (2n→2n)", "Meiosis: crossing over in Prophase I", "S phase: DNA replication", "G1+S+G2+M = cell cycle"] },
-    { category: "DNA & Gene", items: ["A=T (2H bonds), G≡C (3H bonds)", "Chargaff: %A=%T, %G=%C", "Transcription: DNA→mRNA", "Translation: mRNA→protein (codons=3 bases)"] },
-    { category: "Photosynthesis", items: ["6CO₂+6H₂O → C₆H₁₂O₆+6O₂", "Light rxn: H₂O→O₂+ATP+NADPH (thylakoid)", "Calvin: CO₂+ATP+NADPH→G3P (stroma)", "C4: CO₂ fixed by PEP carboxylase"] },
-    { category: "Respiration", items: ["Glycolysis: Glucose→2 Pyruvate (2 ATP, cytoplasm)", "Krebs: 2 Acetyl-CoA→CO₂+8 NADH+2 FADH₂", "ETC: 34 ATP (inner mitochondrial membrane)", "Total aerobic: ~38 ATP per glucose"] },
-    { category: "Circulation", items: ["RA→RV→Pulmonary→Lungs→LA→LV→Aorta", "SA node: pacemaker of heart", "ABO: A(IAIA/IAi), B(IBIB/IBi), O(ii), AB(IAIB)", "Rh+: dominant, Erythroblastosis if Rh− mother"] },
-    { category: "Hormones", items: ["ADH: water reabsorption (DCT/CD)", "Insulin↓glucose | Glucagon↑glucose", "TSH→T3/T4 | ACTH→Cortisol | LH surge→Ovulation", "GH from anterior pituitary | Oxytocin from posterior"] },
-    { category: "Genetics", items: ["Mendel: Law of Segregation + Independent Assortment", "Test cross: unknown × recessive homozygous", "Incomplete dominance: 1:2:1 phenotype ratio", "Codominance: both alleles expressed (e.g. AB blood)"] },
-  ],
+const SECTION_COLORS: Record<string, { text: string; bg: string; border: string; badge: string; gradient: string; solid: string }> = {
+  VARC: { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/20', badge: 'bg-blue-500/10 border-blue-500/20 text-blue-400', gradient: 'from-blue-500 to-cyan-500', solid: 'border-blue-500' },
+  DILR: { text: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20', badge: 'bg-purple-500/10 border-purple-500/20 text-purple-400', gradient: 'from-purple-500 to-fuchsia-500', solid: 'border-purple-500' },
+  QA: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20', badge: 'bg-amber-500/10 border-amber-500/20 text-amber-400', gradient: 'from-amber-500 to-orange-500', solid: 'border-amber-500' },
 };
 
 export default function Dashboard() {
@@ -140,7 +83,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isRightSidebarOpen, setRightSidebarOpen] = useState(false);
-  const [rightSidebarMode, setRightSidebarMode] = useState<'notebook' | 'mistakes' | 'plan' | 'analytics' | 'goals' | 'formulas'>('notebook');
+  const [rightSidebarMode, setRightSidebarMode] = useState<'notebook' | 'mistakes' | 'plan' | 'analytics' | 'goals' | 'skipstrategy'>('notebook');
   const [activeFile, setActiveFile] = useState<{file: File, preview: string, type: 'image' | 'pdf', base64: string} | null>(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [dragActive, setDragActive] = useState(false);
@@ -156,7 +99,7 @@ export default function Dashboard() {
   // Exam / Topics / Spaced Repetition
   const [examDate, setExamDate] = useState('');
   const [topicsDone, setTopicsDone] = useState<Record<string, boolean>>({});
-  const [activeSubject, setActiveSubject] = useState('Biology');
+  const [activeSubject, setActiveSubject] = useState('VARC');
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewQueue, setReviewQueue] = useState<any[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
@@ -168,8 +111,8 @@ export default function Dashboard() {
   // Daily Goals
   const [goals, setGoals] = useState<{id: string, text: string, done: boolean}[]>([]);
   const [goalInput, setGoalInput] = useState('');
-  // Formula sheet subject tab
-  const [formulaSubject, setFormulaSubject] = useState('Physics');
+  // CAT behavioral profile (skip strategy panel)
+  const [catProfile, setCatProfile] = useState<StudentBehaviorProfile | null>(null);
   // Plan sidebar sub-tab
   const [planTab, setPlanTab] = useState<'revisionplan' | 'checklist'>('revisionplan');
   const [customRevisionPlan, setCustomRevisionPlan] = useState<{day: number; date: string; topics: {subject: string; topic: string}[]}[] | null>(null);
@@ -231,7 +174,16 @@ export default function Dashboard() {
       }
       const planSnap = await getDoc(doc(db, "users", u.uid, "stats", "revisionPlan"));
       if (planSnap.exists() && planSnap.data().plan) {
-        setCustomRevisionPlan(planSnap.data().plan);
+        // Plans saved before the NEET->CAT migration can still carry old
+        // subject keys (Physics/Chemistry/Biology) that don't exist in
+        // CAT_TOPICS/SECTION_COLORS anymore — drop those topics so the UI
+        // doesn't crash trying to look up colors/indices for them.
+        const rawPlan: {day: number; date: string; topics: {subject: string; topic: string}[]}[] = planSnap.data().plan;
+        const cleanedPlan = rawPlan.map(d => ({ ...d, topics: d.topics.filter(t => t.subject in CAT_TOPICS) }));
+        setCustomRevisionPlan(cleanedPlan);
+        if (JSON.stringify(cleanedPlan) !== JSON.stringify(rawPlan)) {
+          await setDoc(doc(db, "users", u.uid, "stats", "revisionPlan"), { plan: cleanedPlan }, { merge: true });
+        }
       }
     });
     return () => unsub();
@@ -264,6 +216,14 @@ export default function Dashboard() {
   }, [user]);
 
   useEffect(() => {
+    if (!user) { setCatProfile(null); return; }
+    const unsubProfile = onSnapshot(doc(db, "studentProfiles", user.uid), (snap) => {
+      setCatProfile(snap.exists() ? (snap.data() as StudentBehaviorProfile) : null);
+    });
+    return () => unsubProfile();
+  }, [user]);
+
+  useEffect(() => {
     if (!user || !activeSessionId) { setMessages([]); setActiveFile(null); return; }
     const qMsgs = query(collection(db, "users", user.uid, "chats", activeSessionId, "messages"), orderBy("createdAt", "asc"));
     return onSnapshot(qMsgs, (snap) => {
@@ -286,7 +246,7 @@ export default function Dashboard() {
       if (newCount % 4 === 0) {
         setTimerPhase('long');
         setTimeLeft(15 * 60);
-        setToast(`${newCount} sessions done! Long break time — 15 min 🌸`);
+        setToast(`${newCount} sessions done! Long break time — 15 min`);
       } else {
         setTimerPhase('short');
         setTimeLeft(5 * 60);
@@ -315,7 +275,7 @@ export default function Dashboard() {
     const exam = new Date(examDate + 'T00:00:00');
     return Math.ceil((exam.getTime() - today.getTime()) / 86400000);
   })() : null;
-  const totalTopics = Object.values(NEET_TOPICS).flat().length;
+  const totalTopics = Object.values(CAT_TOPICS).flat().length;
   const doneCount = Object.values(topicsDone).filter(Boolean).length;
   const dueForReview = mistakes.filter(m => !m.nextReviewDate || m.nextReviewDate <= new Date().toISOString().split('T')[0]);
 
@@ -331,29 +291,6 @@ export default function Dashboard() {
     await setDoc(doc(db, "users", user.uid, "stats", "general"), { personality: p }, { merge: true });
   };
 
-  const buildPanicMessage = () => {
-    const hour = new Date().getHours();
-    const timeContext =
-      hour < 5  ? "It's the middle of the night and I can't stop worrying" :
-      hour < 10 ? "It's morning and I'm already anxious before I've even started" :
-      hour < 14 ? "I've been staring at my books and I just cannot focus" :
-      hour < 18 ? "I've been studying for hours and nothing feels like it's sticking" :
-      hour < 22 ? "It's evening and I still don't feel ready at all" :
-                  "It's really late and I'm just spiraling";
-
-    const examContext = daysLeft !== null && daysLeft >= 0
-      ? `I only have ${daysLeft} day${daysLeft !== 1 ? 's' : ''} left`
-      : "my exam is coming up really soon";
-
-    const progressContext =
-      doneCount === 0                        ? "and I feel like I haven't properly covered anything yet" :
-      doneCount < totalTopics / 3            ? "and I feel like I've barely scratched the surface" :
-      doneCount < (totalTopics * 2) / 3     ? "and there's still so much left to cover" :
-                                               "and even though I've covered most of it, I still feel like I'm going to blank out";
-
-    return `${timeContext}. ${examContext} ${progressContext}. I'm really overwhelmed and I don't know what to do. Please help me.`;
-  };
-
   const toggleTopic = async (key: string) => {
     if (!user) return;
     const newDone = { ...topicsDone, [key]: !topicsDone[key] };
@@ -362,7 +299,7 @@ export default function Dashboard() {
   };
 
   const startReview = () => {
-    if (!dueForReview.length) { setToast("Nothing due for review right now 🌸"); return; }
+    if (!dueForReview.length) { setToast("Nothing due for review right now"); return; }
     setReviewQueue([...dueForReview]);
     setReviewIndex(0);
     setCardFlipped(false);
@@ -382,7 +319,7 @@ export default function Dashboard() {
     });
     if (reviewIndex + 1 >= reviewQueue.length) {
       setReviewMode(false);
-      setToast(`Review done! ${reviewQueue.length} card${reviewQueue.length !== 1 ? 's' : ''} reviewed 🌸`);
+      setToast(`Review done! ${reviewQueue.length} card${reviewQueue.length !== 1 ? 's' : ''} reviewed`);
     } else {
       setReviewIndex(i => i + 1);
       setCardFlipped(false);
@@ -460,7 +397,7 @@ export default function Dashboard() {
   
 
   // --- SEND LOGIC ---
-  const performSend = async (textToSend: string, isSystemCommand = false, isPanic = false) => {
+  const performSend = async (textToSend: string, isSystemCommand = false) => {
     if ((!textToSend.trim() && !activeFile) || isLoading || !user) return;
 
     let chatId = activeSessionId;
@@ -502,7 +439,6 @@ export default function Dashboard() {
           fileData: currentContext?.base64,
           mimeType: currentContext?.file.type,
           daysLeft: daysLeft ?? undefined,
-          isPanic,
           personality,
         }),
       });
@@ -533,8 +469,8 @@ const saveToMistakes = async (msg: any) => {
   const msgIndex = messages.findIndex(m => m.id === msg.id);
   let question = msgIndex > 0 ? messages[msgIndex - 1].text : "Context Question";
   
-  if (question.includes("Generate 3 NEET-style")) {
-    question = "NEET Quiz Revision";
+  if (question.includes("Generate 3 CAT-style")) {
+    question = "CAT Quiz Revision";
   }
 
   try {
@@ -563,29 +499,18 @@ Do NOT write all options on one line. Do NOT use LaTeX ($...$) — write formula
 
 const handleGenerateQuiz = () => {
   if (!activeSessionId) return alert("Start a chat or upload a PDF first!");
-  performSend(`Generate 3 NEET-style Multiple Choice Questions based on our current topic or the attached document.${QUIZ_FORMAT_INSTRUCTION}
+  performSend(`Generate 3 CAT-style Multiple Choice Questions (mix of VARC/DILR/QA) based on our current topic or the attached document.${QUIZ_FORMAT_INSTRUCTION}
 
 Put all answers at the very bottom inside a <details> block.`, true);
 };
 
 const handleBlitzQuiz = () => {
   if (!activeSessionId) return alert("Start a chat first!");
-  performSend(`Generate 10 rapid-fire NEET-style MCQs on our current topic. Exam-level difficulty.${QUIZ_FORMAT_INSTRUCTION}
+  performSend(`Generate 10 rapid-fire CAT-style MCQs (mix of VARC/DILR/QA) on our current topic. Exam-level difficulty.${QUIZ_FORMAT_INSTRUCTION}
 
 Put all answers at the very bottom inside a <details> block.`, true);
 };
 
-const handlePanic = () => {
-  const msg = buildPanicMessage();
-  if (!activeSessionId) {
-    addDoc(collection(db, "users", user.uid, "chats"), { title: "SOS", createdAt: serverTimestamp() }).then(ref => {
-      setActiveSessionId(ref.id);
-      setTimeout(() => performSend(msg, false, true), 100);
-    });
-    return;
-  }
-  performSend(msg, false, true);
-};
   const deleteMistake = async (id: string) => { if(confirm("Remove?")) await deleteDoc(doc(db, "users", user.uid, "mistakes", id)); };
 
   // --- GOALS ---
@@ -609,7 +534,7 @@ const handlePanic = () => {
   };
 
   // --- ANALYTICS & WEAK TOPIC RADAR ---
-  const subjectStats = Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+  const subjectStats = Object.entries(CAT_TOPICS).map(([subject, topics]) => {
     const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
     return { subject, done, total: topics.length, pct: Math.round((done / topics.length) * 100) };
   }).sort((a, b) => a.pct - b.pct);
@@ -620,7 +545,7 @@ const handlePanic = () => {
   const generateRevisionPlan = () => {
     if (!daysLeft || daysLeft <= 0) return [];
     const remaining: { subject: string; topic: string }[] = [];
-    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+    Object.entries(CAT_TOPICS).forEach(([subject, topics]) => {
       topics.forEach((topic, i) => {
         if (!topicsDone[`${subject}_${i}`]) remaining.push({ subject, topic });
       });
@@ -666,7 +591,7 @@ const handlePanic = () => {
     if (!customRevisionPlan) return [];
     const scheduled = new Set(customRevisionPlan.flatMap(d => d.topics.map(t => `${t.subject}:::${t.topic}`)));
     const result: {subject: string; topic: string}[] = [];
-    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+    Object.entries(CAT_TOPICS).forEach(([subject, topics]) => {
       topics.forEach(topic => {
         if (!scheduled.has(`${subject}:::${topic}`)) result.push({ subject, topic });
       });
@@ -710,9 +635,8 @@ const handlePanic = () => {
   const activeNote = notes.find(n => n.id === activeNoteId);
 
   return (
-    <div className="flex h-screen w-full bg-[#050505] text-zinc-100 font-sans overflow-hidden" onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}>
-      <div className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300" style={{ background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(236, 72, 153, 0.08), transparent 40%)` }}/>
-      <SakuraRain />
+    <div className="flex h-screen w-full bg-[#0a0f1e] text-zinc-100 font-sans overflow-hidden" onMouseMove={(e) => setMousePos({ x: e.clientX, y: e.clientY })}>
+      <div className="fixed inset-0 z-0 pointer-events-none transition-opacity duration-300" style={{ background: `radial-gradient(600px circle at ${mousePos.x}px ${mousePos.y}px, rgba(245, 158, 11, 0.08), transparent 40%)` }}/>
 
       {/* TOAST */}
       <AnimatePresence>
@@ -726,20 +650,20 @@ const handlePanic = () => {
       {/* LEFT SIDEBAR */}
       <motion.aside animate={{ width: isSidebarOpen ? 280 : 70 }} className="h-full flex-shrink-0 border-r border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col z-20 shadow-2xl">
         <div className="p-5 flex items-center justify-between">
-           {isSidebarOpen ? <span className="font-bold text-lg text-pink-400">Mika 2.0</span> : <span className="font-bold mx-auto text-pink-500">M</span>}
+           {isSidebarOpen ? <span className="font-bold text-lg text-amber-400">Mika 2.0</span> : <span className="font-bold mx-auto text-amber-500">M</span>}
            <button onClick={() => setSidebarOpen(!isSidebarOpen)}><Menu size={20} className="text-zinc-500 hover:text-white"/></button>
         </div>
         <div className="px-3 mb-3">
-           <button onClick={() => { setActiveSessionId(null); setActiveFile(null); }} className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5"><Plus size={18} className="text-pink-500" />{isSidebarOpen && <span className="text-sm font-medium">New Session</span>}</button>
+           <button onClick={() => { setActiveSessionId(null); setActiveFile(null); }} className="w-full flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/5"><Plus size={18} className="text-amber-500" />{isSidebarOpen && <span className="text-sm font-medium">New Session</span>}</button>
         </div>
 
         {/* PERSONALITY SELECTOR */}
         {isSidebarOpen && (() => {
           const options: { id: Personality; label: string; icon: React.ReactNode; active: string; inactive: string }[] = [
-            { id: 'bestfriend',    label: 'Best Friend',    icon: <Smile size={11}/>,        active: 'bg-pink-500/20 text-pink-300 border-pink-500/30',    inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'bestfriend',    label: 'Best Friend',    icon: <MessageCircle size={11}/>, active: 'bg-amber-500/20 text-amber-300 border-amber-500/30',    inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
             { id: 'studybuddy',   label: 'Study Buddy',    icon: <Users size={11}/>,         active: 'bg-blue-500/20 text-blue-300 border-blue-500/30',     inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
-            { id: 'strictteacher',label: 'Strict Teacher', icon: <GraduationCap size={11}/>, active: 'bg-purple-500/20 text-purple-300 border-purple-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
-            { id: 'therapist',    label: 'Calm Support',   icon: <HeartHandshake size={11}/>,active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'strictteacher',label: 'Strict Teacher', icon: <GraduationCap size={11}/>, active: 'bg-orange-500/20 text-orange-300 border-orange-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
+            { id: 'therapist',    label: 'Calm Support',   icon: <Waves size={11}/>,         active: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',inactive: 'text-zinc-500 border-transparent hover:border-white/10 hover:text-zinc-300' },
           ];
           return (
             <div className="px-3 mb-3">
@@ -757,9 +681,9 @@ const handlePanic = () => {
         })()}
         <div className="flex-1 overflow-y-auto px-2 space-y-1 custom-scrollbar">
            {sessions.map(s => (
-             <div key={s.id} onClick={() => setActiveSessionId(s.id)} className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${activeSessionId === s.id ? 'bg-pink-500/10 border border-pink-500/20' : 'hover:bg-white/5 border border-transparent'}`}>
-               <MessageSquare size={16} className={activeSessionId === s.id ? "text-pink-400" : "text-zinc-600"} />
-               {isSidebarOpen && <span className={`text-sm truncate flex-1 ${activeSessionId === s.id ? "text-pink-100" : "text-zinc-400"}`}>{s.title}</span>}
+             <div key={s.id} onClick={() => setActiveSessionId(s.id)} className={`group flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${activeSessionId === s.id ? 'bg-amber-500/10 border border-amber-500/20' : 'hover:bg-white/5 border border-transparent'}`}>
+               <MessageSquare size={16} className={activeSessionId === s.id ? "text-amber-400" : "text-zinc-600"} />
+               {isSidebarOpen && <span className={`text-sm truncate flex-1 ${activeSessionId === s.id ? "text-amber-100" : "text-zinc-400"}`}>{s.title}</span>}
                {isSidebarOpen && <button onClick={(e) => deleteSession(e, s.id)} className="opacity-0 group-hover:opacity-100 hover:text-red-400"><Trash2 size={12}/></button>}
              </div>
            ))}
@@ -772,9 +696,9 @@ const handlePanic = () => {
         <header className="h-16 flex items-center justify-between px-4 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md overflow-x-auto gap-2">
            <div className="flex items-center gap-2 flex-shrink-0">
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
-             <Link href="/exam" className="flex items-center gap-1.5 text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 hover:bg-blue-500/20 transition-colors" title="NEET Exam Simulator">
-               <ClipboardList size={14} />
-               <span className="text-xs font-bold">Exam</span>
+             <Link href="/cat" className="flex items-center gap-1.5 text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20 hover:bg-amber-500/20 transition-colors" title="CAT Mock Simulator">
+               <Target size={14} />
+               <span className="text-xs font-bold">CAT</span>
              </Link>
              <div className="flex items-center gap-1">
                <button onClick={() => setTimerActive(!timerActive)} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${timerActive ? (timerPhase === 'work' ? 'border-emerald-500/30 text-emerald-400 bg-emerald-500/5' : 'border-blue-500/30 text-blue-400 bg-blue-500/5') : 'border-white/10 text-zinc-400 hover:text-white'}`}>
@@ -787,7 +711,7 @@ const handlePanic = () => {
                  <button onClick={resetTimer} className="text-zinc-600 hover:text-zinc-400 transition-colors" title="Reset timer"><X size={12}/></button>
                )}
              </div>
-             <button onClick={handleGenerateQuiz} title="Generate Quiz" className="flex items-center gap-2 px-3 py-1 rounded-full border border-purple-500/30 text-purple-400 hover:bg-purple-500/10 transition-colors">
+             <button onClick={handleGenerateQuiz} title="Generate Quiz" className="flex items-center gap-2 px-3 py-1 rounded-full border border-orange-500/30 text-orange-400 hover:bg-orange-500/10 transition-colors">
                <BrainCircuit size={14} />
                <span className="text-xs font-bold">Quiz Me</span>
              </button>
@@ -796,13 +720,9 @@ const handlePanic = () => {
                <span className="text-xs font-bold">Blitz</span>
              </button>
              {/* VOICE TOGGLE */}
-             <button onClick={() => { setIsSpeaking(!isSpeaking); stopSpeaking(); }} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${isSpeaking ? 'bg-pink-500/10 border-pink-500/30 text-pink-400' : 'border-white/10 text-zinc-500'}`}>
+             <button onClick={() => { setIsSpeaking(!isSpeaking); stopSpeaking(); }} className={`flex items-center gap-2 px-3 py-1 rounded-full border transition-colors ${isSpeaking ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' : 'border-white/10 text-zinc-500'}`}>
                {isSpeaking ? <Volume2 size={14}/> : <VolumeX size={14}/>}
                <span className="text-xs font-bold">{isSpeaking ? "Voice ON" : "Voice OFF"}</span>
-             </button>
-             <button onClick={handlePanic} title="I'm overwhelmed — talk to Mika" className="flex items-center gap-2 px-3 py-1 rounded-full border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
-               <Heart size={14} />
-               <span className="text-xs font-bold">SOS</span>
              </button>
            </div>
            
@@ -823,18 +743,29 @@ const handlePanic = () => {
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6 scroll-smooth">
            {messages.length === 0 ? (
-             <div className="h-full flex flex-col items-center justify-center opacity-80">
-               <Sparkles size={50} className="text-pink-400 mb-4" />
+             <div className="h-full flex flex-col items-center justify-center opacity-80 px-4">
+               <BrainCircuit size={50} className="text-amber-400 mb-4" />
                <h2 className="text-xl font-bold text-white">Ready to Study.</h2>
                <p className="text-zinc-500 text-sm mt-2">I am listening.</p>
+               <div className="mt-6 max-w-sm w-full">
+                 <Link href="/cat" className="group flex flex-col gap-2 p-5 rounded-xl border border-gray-800 hover:border-amber-500/50 hover:bg-gray-900 transition-all">
+                   <div className="flex items-center gap-3">
+                     <div className="p-2 rounded-lg bg-amber-500/10">
+                       <Target className="w-5 h-5 text-amber-400" />
+                     </div>
+                     <span className="font-semibold text-white">CAT Mock Simulator</span>
+                   </div>
+                   <p className="text-sm text-gray-400">Take a full CAT mock with sectional timers. Get your personal skip strategy after every attempt.</p>
+                 </Link>
+               </div>
              </div>
            ) : (
              messages.map((msg, i) => (
                <div key={i} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "user" ? "bg-zinc-800" : "bg-gradient-to-br from-pink-600 to-purple-600"}`}>{msg.role === "user" ? "YOU" : <Sparkles size={16}/>}</div>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 shadow-lg ${msg.role === "user" ? "bg-zinc-800" : "bg-gradient-to-br from-amber-600 to-amber-700"}`}>{msg.role === "user" ? "YOU" : <BrainCircuit size={16}/>}</div>
                   <div className={`flex flex-col gap-2 max-w-[80%] ${msg.role === "user" ? "items-end" : "items-start"}`}>
                     {msg.image && <img src={msg.image} className="max-w-[300px] rounded-xl border border-white/10 shadow-lg mb-1" />}
-                    {msg.isPdf && <div className="flex items-center gap-2 bg-pink-900/30 border border-pink-500/30 p-3 rounded-xl mb-1 text-pink-200 text-sm"><FileText size={16} /><span className="font-medium">PDF Analyzed: {msg.pdfName}</span></div>}
+                    {msg.isPdf && <div className="flex items-center gap-2 bg-amber-900/30 border border-amber-500/30 p-3 rounded-xl mb-1 text-amber-200 text-sm"><FileText size={16} /><span className="font-medium">PDF Analyzed: {msg.pdfName}</span></div>}
                     <div className={`p-4 rounded-2xl text-sm leading-relaxed shadow-md group relative ${msg.role === "user" ? "bg-zinc-800 border border-white/5" : "bg-white/5 border border-white/10 backdrop-blur-md"}`}>
                        <div className="markdown-content">
                          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>{msg.text}</ReactMarkdown>
@@ -856,9 +787,9 @@ const handlePanic = () => {
         </div>
 
         <div className="p-6">
-           {activeFile && <div className="mb-2 flex items-center gap-2 bg-pink-900/40 border border-pink-500/40 px-3 py-2 rounded-lg text-xs text-pink-200 w-fit backdrop-blur-md shadow-lg"><FileText size={14}/><span>Context: <strong>{activeFile.file.name}</strong></span><button onClick={() => setActiveFile(null)} className="hover:text-white ml-2 bg-black/20 rounded-full p-0.5"><X size={12}/></button></div>}
+           {activeFile && <div className="mb-2 flex items-center gap-2 bg-amber-900/40 border border-amber-500/40 px-3 py-2 rounded-lg text-xs text-amber-200 w-fit backdrop-blur-md shadow-lg"><FileText size={14}/><span>Context: <strong>{activeFile.file.name}</strong></span><button onClick={() => setActiveFile(null)} className="hover:text-white ml-2 bg-black/20 rounded-full p-0.5"><X size={12}/></button></div>}
            <div className={`flex items-center bg-zinc-900/80 border ${isListening ? 'border-red-500/50' : 'border-white/10'} rounded-2xl px-2 py-2 shadow-2xl backdrop-blur-xl transition-colors`}>
-             <button onClick={() => fileInputRef.current?.click()} className="p-3 hover:bg-white/5 rounded-xl text-zinc-500 hover:text-pink-400"><Paperclip size={20}/></button>
+             <button onClick={() => fileInputRef.current?.click()} className="p-3 hover:bg-white/5 rounded-xl text-zinc-500 hover:text-amber-400"><Paperclip size={20}/></button>
              <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileSelect}/>
              <input 
                 value={input} 
@@ -872,16 +803,16 @@ const handlePanic = () => {
              <button onClick={startListening} className={`p-3 rounded-xl transition-all ${isListening ? 'bg-red-500/20 text-red-400 animate-pulse' : 'text-zinc-500 hover:text-white'}`}>
                {isListening ? <StopCircle size={20} /> : <Mic size={20} />}
              </button>
-             <button onClick={handleSendClick} disabled={isLoading} className="p-3 rounded-xl text-white bg-gradient-to-br from-pink-600 to-purple-600 shadow-lg"><Send size={18}/></button>
+             <button onClick={handleSendClick} disabled={isLoading} className="p-3 rounded-xl text-white bg-gradient-to-br from-amber-600 to-amber-700 shadow-lg"><Send size={18}/></button>
            </div>
         </div>
       </main>
 
       {/* RIGHT ACTIVITY BAR — always visible */}
       <div className="flex-shrink-0 w-12 h-full border-l border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col items-center py-4 gap-2 z-20">
-        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={18} /></button>
-        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-pink-300 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Revision Plan"><CalendarDays size={18} /></button>
-        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/15' : 'text-zinc-500 hover:text-white'}`} title="Formula Sheet"><BookMarked size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-amber-400 bg-amber-500/15' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-amber-300 bg-amber-500/15' : 'text-zinc-500 hover:text-white'}`} title="Revision Plan"><CalendarDays size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'skipstrategy') setRightSidebarOpen(false); else { setRightSidebarMode('skipstrategy'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'skipstrategy' ? 'text-teal-400 bg-teal-500/15' : 'text-zinc-500 hover:text-white'}`} title="Skip Strategy"><Crosshair size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'goals') setRightSidebarOpen(false); else { setRightSidebarMode('goals'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'goals' ? 'text-emerald-400 bg-emerald-500/15' : 'text-zinc-500 hover:text-white'}`} title="Daily Goals"><Target size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'analytics') setRightSidebarOpen(false); else { setRightSidebarMode('analytics'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'analytics' ? 'text-blue-400 bg-blue-500/15' : 'text-zinc-500 hover:text-white'}`} title="Progress Analytics"><BarChart2 size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/15' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={18} /></button>
@@ -893,12 +824,12 @@ const handlePanic = () => {
           <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 400, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex-shrink-0 border-l border-white/5 bg-zinc-950/90 backdrop-blur-2xl flex flex-col z-20 shadow-2xl">
              <div className="h-16 border-b border-white/5 flex items-center justify-between px-5 bg-zinc-900/50 min-w-[400px]">
                <span className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
-                 {rightSidebarMode === 'notebook' ? <><Edit3 size={14} className="text-pink-500"/> Notebook</>
+                 {rightSidebarMode === 'notebook' ? <><Edit3 size={14} className="text-amber-500"/> Notebook</>
                    : rightSidebarMode === 'mistakes' ? <><AlertTriangle size={14} className="text-yellow-500"/> Mistake Log</>
                    : rightSidebarMode === 'analytics' ? <><BarChart2 size={14} className="text-blue-400"/> Progress Analytics</>
                    : rightSidebarMode === 'goals' ? <><Target size={14} className="text-emerald-400"/> Daily Goals</>
-                   : rightSidebarMode === 'formulas' ? <><BookMarked size={14} className="text-teal-400"/> Formula Sheet</>
-                   : <><CalendarDays size={14} className="text-pink-400"/> Revision Plan</>}
+                   : rightSidebarMode === 'skipstrategy' ? <><Crosshair size={14} className="text-teal-400"/> Skip Strategy</>
+                   : <><CalendarDays size={14} className="text-amber-400"/> Revision Plan</>}
                </span>
                <div className="flex items-center gap-2">
                  {rightSidebarMode === 'notebook' && !activeNoteId && <button onClick={handleNewNote}><Plus size={18} className="text-zinc-400 hover:text-white"/></button>}
@@ -935,7 +866,7 @@ const handlePanic = () => {
                      </div>
                      {/* Progress bar */}
                      <div className="h-1 bg-white/5 rounded-full mb-5">
-                       <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 rounded-full transition-all duration-300" style={{ width: `${(reviewIndex / reviewQueue.length) * 100}%` }}/>
+                       <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-300" style={{ width: `${(reviewIndex / reviewQueue.length) * 100}%` }}/>
                      </div>
                      {/* Question card */}
                      <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-4">
@@ -950,7 +881,7 @@ const handlePanic = () => {
                      ) : (
                        <>
                          <div className="p-4 rounded-xl bg-black/30 border border-white/10 flex-1 overflow-y-auto mb-4 custom-scrollbar">
-                           <div className="text-xs text-pink-400 font-bold mb-2">Answer</div>
+                           <div className="text-xs text-amber-400 font-bold mb-2">Answer</div>
                            <div className="text-sm text-zinc-300 markdown-content">
                              <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeRaw, rehypeKatex]}>{reviewQueue[reviewIndex]?.answer}</ReactMarkdown>
                            </div>
@@ -969,9 +900,9 @@ const handlePanic = () => {
                  ) : (
                    <div className="p-4 space-y-3">
                      {/* Review CTA */}
-                     <button onClick={startReview} className={`w-full py-3 rounded-xl border text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${dueForReview.length > 0 ? 'bg-pink-500/10 border-pink-500/30 text-pink-400 hover:bg-pink-500/20' : 'bg-white/5 border-white/10 text-zinc-500 cursor-default'}`}>
+                     <button onClick={startReview} className={`w-full py-3 rounded-xl border text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${dueForReview.length > 0 ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20' : 'bg-white/5 border-white/10 text-zinc-500 cursor-default'}`}>
                        <BrainCircuit size={14}/>
-                       {dueForReview.length > 0 ? `Review ${dueForReview.length} due card${dueForReview.length !== 1 ? 's' : ''}` : 'All caught up! 🌸'}
+                       {dueForReview.length > 0 ? `Review ${dueForReview.length} due card${dueForReview.length !== 1 ? 's' : ''}` : 'All caught up!'}
                      </button>
                      {mistakes.length === 0 && <div className="text-center text-zinc-500 mt-6 text-sm">No mistakes logged yet.</div>}
                      {mistakes.map(m => (
@@ -999,8 +930,8 @@ const handlePanic = () => {
                        <div className="text-2xl font-black text-orange-400 tabular-nums">{streak}</div>
                        <div className="text-xs text-zinc-500 mt-0.5">Day Streak</div>
                      </div>
-                     <div className="rounded-xl bg-pink-500/10 border border-pink-500/20 p-3 text-center">
-                       <div className="text-2xl font-black text-pink-400 tabular-nums">{doneCount}</div>
+                     <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-center">
+                       <div className="text-2xl font-black text-amber-400 tabular-nums">{doneCount}</div>
                        <div className="text-xs text-zinc-500 mt-0.5">Topics Done</div>
                      </div>
                      <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-center">
@@ -1011,13 +942,13 @@ const handlePanic = () => {
 
                    {/* Subject completion bars */}
                    <div>
-                     <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Subject Progress</div>
+                     <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Section Progress</div>
                      <div className="space-y-3">
-                       {Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+                       {Object.entries(CAT_TOPICS).map(([subject, topics]) => {
                          const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
                          const pct = Math.round((done / topics.length) * 100);
-                         const color = subject === 'Biology' ? 'from-emerald-500 to-teal-500' : subject === 'Physics' ? 'from-blue-500 to-indigo-500' : 'from-purple-500 to-pink-500';
-                         const bg = subject === 'Biology' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : subject === 'Physics' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400';
+                         const color = SECTION_COLORS[subject].gradient;
+                         const bg = SECTION_COLORS[subject].badge;
                          return (
                            <div key={subject}>
                              <div className="flex justify-between items-center mb-1.5">
@@ -1088,10 +1019,10 @@ const handlePanic = () => {
 
                    {/* Days left stat */}
                    {daysLeft !== null && (
-                     <div className="rounded-xl bg-pink-500/5 border border-pink-500/20 p-4 flex items-center justify-between">
+                     <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-4 flex items-center justify-between">
                        <div>
                          <div className="text-xs text-zinc-500 mb-0.5">Days until exam</div>
-                         <div className="text-2xl font-black text-pink-300 tabular-nums">{daysLeft}</div>
+                         <div className="text-2xl font-black text-amber-300 tabular-nums">{daysLeft}</div>
                        </div>
                        {daysLeft > 0 && (
                          <div className="text-right">
@@ -1146,43 +1077,121 @@ const handlePanic = () => {
                    </div>
                    {goals.length > 0 && goals.every(g => g.done) && (
                      <div className="p-4 border-t border-white/5 text-center text-sm text-emerald-400 font-semibold">
-                       All done for today! 🌸
+                       All done for today!
                      </div>
                    )}
                  </div>
-               ) : rightSidebarMode === 'formulas' ? (
-                 // FORMULA QUICK REFERENCE
-                 <div className="flex flex-col h-full">
-                   <div className="flex border-b border-white/5 flex-shrink-0">
-                     {Object.keys(FORMULAS).map(subject => (
-                       <button key={subject} onClick={() => setFormulaSubject(subject)}
-                         className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${formulaSubject === subject ? 'border-teal-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
-                         {subject}
-                       </button>
-                     ))}
+               ) : rightSidebarMode === 'skipstrategy' ? (
+                 // SKIP STRATEGY — live behavioral data from CAT mocks
+                 !catProfile ? (
+                   <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                     <Crosshair size={32} className="text-teal-500/60 mb-3" />
+                     <p className="text-sm font-semibold text-zinc-300">No mock data yet</p>
+                     <p className="text-xs text-zinc-500 mt-1.5 mb-5">Take a CAT mock to unlock your personal skip strategy — weak chapters, rush patterns, and error breakdown.</p>
+                     <Link href="/cat" className="px-4 py-2 rounded-lg bg-teal-500/10 border border-teal-500/30 text-teal-400 text-xs font-semibold hover:bg-teal-500/20 transition-colors">
+                       Take a CAT Mock
+                     </Link>
                    </div>
-                   <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                     {FORMULAS[formulaSubject]?.map(section => (
-                       <div key={section.category}>
-                         <div className="text-xs text-teal-400 font-bold uppercase tracking-wider mb-2">{section.category}</div>
-                         <div className="space-y-1.5">
-                           {section.items.map((item, i) => (
-                             <div key={i} className="font-mono text-xs bg-zinc-900/80 border border-white/5 rounded-lg px-3 py-2 text-zinc-300 hover:border-teal-500/30 hover:text-white transition-colors cursor-default">
-                               {item}
-                             </div>
-                           ))}
+                 ) : (
+                   <div className="p-5 space-y-6 overflow-y-auto custom-scrollbar h-full">
+                     <div className="text-xs text-zinc-500">Based on {catProfile.mockCount} mock{catProfile.mockCount !== 1 ? 's' : ''}</div>
+
+                     {/* Section stats */}
+                     <div className="grid grid-cols-3 gap-2">
+                       {(['VARC', 'DILR', 'QA'] as CATSection[]).map(sec => {
+                         const s = catProfile.sectionStats[sec];
+                         const c = SECTION_COLORS[sec];
+                         return (
+                           <div key={sec} className={`rounded-xl border p-3 ${c.bg} ${c.border}`}>
+                             <div className={`text-xs font-bold ${c.text}`}>{sec}</div>
+                             <div className="text-lg font-black text-white tabular-nums mt-1">{Math.round((s?.avgAccuracy ?? 0) * 100)}%</div>
+                             <div className="text-[10px] text-zinc-500">accuracy</div>
+                             <div className="text-[10px] text-zinc-500 mt-1">net {Math.round(s?.avgNetScore ?? 0)}</div>
+                             {s?.rushPattern && (
+                               <div className="mt-1.5 text-[10px] font-semibold text-orange-400 flex items-center gap-1">
+                                 <AlertTriangle size={9}/> Rush
+                               </div>
+                             )}
+                           </div>
+                         );
+                       })}
+                     </div>
+
+                     {/* Skip recommendations */}
+                     <div>
+                       <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Skip Recommendations</div>
+                       {catProfile.skipRecommendations.length === 0 ? (
+                         <div className="text-xs text-zinc-600 text-center py-4 rounded-xl border border-dashed border-white/10">No skip-worthy chapters yet — keep attempting.</div>
+                       ) : (
+                         <div className="space-y-2">
+                           {catProfile.skipRecommendations.map((r, i) => {
+                             const c = SECTION_COLORS[r.section];
+                             return (
+                               <div key={i} className="rounded-xl bg-red-500/5 border border-red-500/20 p-3">
+                                 <div className="flex items-center justify-between gap-2 mb-1">
+                                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${c.badge}`}>{r.section}</span>
+                                   <span className="text-xs font-mono font-bold text-red-400">{r.netScoreImpact} marks</span>
+                                 </div>
+                                 <div className="text-xs font-semibold text-zinc-200">{r.chapter} <span className="text-zinc-500 font-normal">· {r.questionType}</span></div>
+                                 <div className="text-[11px] text-zinc-500 mt-1">{r.reasoning}</div>
+                                 <div className="text-[11px] text-emerald-400 mt-1">Skipping recovers +{r.projectedGainIfSkipped} marks</div>
+                               </div>
+                             );
+                           })}
                          </div>
+                       )}
+                     </div>
+
+                     {/* Error breakdown */}
+                     <div>
+                       <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Error Breakdown</div>
+                       <div className="space-y-2">
+                         {(Object.entries(catProfile.errorBreakdown) as [string, number][])
+                           .sort((a, b) => b[1] - a[1])
+                           .map(([type, count]) => {
+                             const total = Object.values(catProfile.errorBreakdown).reduce((a, b) => a + b, 0) || 1;
+                             const pct = Math.round((count / total) * 100);
+                             return (
+                               <div key={type} className="flex items-center gap-3 text-xs">
+                                 <span className="text-zinc-400 flex-1 capitalize">{type}</span>
+                                 <div className="w-24 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                   <div className="h-full bg-gradient-to-r from-red-500 to-orange-500 rounded-full" style={{ width: `${pct}%` }}/>
+                                 </div>
+                                 <span className="font-mono text-zinc-500 w-6 text-right">{count}</span>
+                               </div>
+                             );
+                           })}
                        </div>
-                     ))}
+                     </div>
+
+                     {/* Weakest chapters */}
+                     <div>
+                       <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Weakest Chapters</div>
+                       <div className="space-y-2">
+                         {[...catProfile.chapterStats]
+                           .sort((a, b) => a.netScoreImpact - b.netScoreImpact)
+                           .slice(0, 5)
+                           .map((cs, i) => {
+                             const c = SECTION_COLORS[cs.section];
+                             return (
+                               <div key={i} className="flex items-center gap-3 text-xs">
+                                 <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded flex-shrink-0 ${c.badge}`}>{cs.section}</span>
+                                 <span className="text-zinc-300 flex-1 truncate">{cs.chapter}</span>
+                                 <span className="font-mono text-zinc-500">{Math.round(cs.accuracy * 100)}%</span>
+                               </div>
+                             );
+                           })}
+                       </div>
+                     </div>
                    </div>
-                 </div>
+                 )
                ) : (
                  // PLAN — revision plan + topic checklist (tabbed)
                  <div className="flex flex-col h-full">
                    {/* Sub-tabs */}
                    <div className="flex border-b border-white/5 flex-shrink-0">
-                     <button onClick={() => setPlanTab('revisionplan')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'revisionplan' ? 'border-pink-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Revision Plan</button>
-                     <button onClick={() => setPlanTab('checklist')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'checklist' ? 'border-pink-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Topic Checklist</button>
+                     <button onClick={() => setPlanTab('revisionplan')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'revisionplan' ? 'border-amber-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Revision Plan</button>
+                     <button onClick={() => setPlanTab('checklist')} className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${planTab === 'checklist' ? 'border-amber-500 text-white' : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>Topic Checklist</button>
                    </div>
 
                    {planTab === 'revisionplan' ? (() => {
@@ -1191,7 +1200,7 @@ const handlePanic = () => {
                      return (
                        <>
                          {/* Header */}
-                         <div className="p-4 border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent">
+                         <div className="p-4 border-b border-white/5 bg-gradient-to-b from-amber-500/5 to-transparent">
                            <div className="text-center mb-3">
                              {daysLeft !== null && daysLeft > 0 ? (
                                <>
@@ -1200,15 +1209,15 @@ const handlePanic = () => {
                                  <div className="text-xs text-zinc-600 mt-0.5">~{Math.ceil((totalTopics - doneCount) / daysLeft)} chapters/day</div>
                                </>
                              ) : (
-                               <div className="text-base font-bold text-pink-400">Set exam date to generate plan</div>
+                               <div className="text-base font-bold text-amber-400">Set exam date to generate plan</div>
                              )}
                            </div>
                            <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
-                             className="w-full text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors mb-3" />
+                             className="w-full text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-amber-500/50 transition-colors mb-3" />
                            <div className="flex gap-2">
                              {isEditingPlan ? (
                                <button onClick={() => { setIsEditingPlan(false); setPlanDragSrc(null); setPlanDragOver(null); setPlanDragOverDay(null); }}
-                                 className="flex-1 py-1.5 text-xs rounded-lg bg-pink-500/20 border border-pink-500/30 text-pink-300 hover:bg-pink-500/30 transition-colors flex items-center justify-center gap-1.5">
+                                 className="flex-1 py-1.5 text-xs rounded-lg bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:bg-amber-500/30 transition-colors flex items-center justify-center gap-1.5">
                                  <Check size={11}/> Done Editing
                                </button>
                              ) : (
@@ -1233,11 +1242,11 @@ const handlePanic = () => {
                          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                            {displayPlan.length === 0 ? (
                              <div className="text-center text-zinc-600 text-sm mt-8">
-                               {daysLeft && daysLeft > 0 ? 'All topics covered! 🌸' : 'Set your exam date above to see your plan.'}
+                               {daysLeft && daysLeft > 0 ? 'All topics covered!' : 'Set your exam date above to see your plan.'}
                              </div>
                            ) : displayPlan.map(({ day, date, topics }, dayIdx) => (
                              <div key={day}
-                               className={`rounded-xl border overflow-hidden transition-colors ${planDragOverDay === dayIdx && isEditingPlan ? 'border-pink-500/40 bg-pink-500/5' : 'border-white/5 bg-white/[0.02]'}`}
+                               className={`rounded-xl border overflow-hidden transition-colors ${planDragOverDay === dayIdx && isEditingPlan ? 'border-amber-500/40 bg-amber-500/5' : 'border-white/5 bg-white/[0.02]'}`}
                                onDragOver={e => { if (isEditingPlan) { e.preventDefault(); if (!planDragOver) setPlanDragOverDay(dayIdx); } }}
                                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPlanDragOverDay(null); }}
                                onDrop={e => {
@@ -1252,12 +1261,12 @@ const handlePanic = () => {
                                  setPlanDragSrc(null);
                                }}>
                                <div className="flex items-center justify-between px-4 py-2.5 bg-white/5 border-b border-white/5">
-                                 <span className="text-xs font-bold text-pink-300">Day {day}</span>
+                                 <span className="text-xs font-bold text-amber-300">Day {day}</span>
                                  <div className="flex items-center gap-2">
                                    <span className="text-xs text-zinc-500">{date} · {topics.length} topic{topics.length !== 1 ? 's' : ''}</span>
                                    {isEditingPlan && (
                                      <button onClick={() => { setAddToDay(addToDay === dayIdx ? null : dayIdx); setTopicSearch(''); }}
-                                       className={`transition-colors ${addToDay === dayIdx ? 'text-pink-400' : 'text-zinc-600 hover:text-pink-400'}`} title="Add topic to this day">
+                                       className={`transition-colors ${addToDay === dayIdx ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`} title="Add topic to this day">
                                        <Plus size={13}/>
                                      </button>
                                    )}
@@ -1268,14 +1277,14 @@ const handlePanic = () => {
                                    <div className="text-xs text-zinc-700 text-center py-2 border border-dashed border-white/10 rounded-lg">Drop topics here</div>
                                  )}
                                  {topics.map(({ subject, topic }, topicIdx) => {
-                                   const tIdx = NEET_TOPICS[subject]?.indexOf(topic) ?? -1;
+                                   const tIdx = CAT_TOPICS[subject]?.indexOf(topic) ?? -1;
                                    const isDone = tIdx !== -1 && !!topicsDone[`${subject}_${tIdx}`];
                                    const isSrc = planDragSrc?.dayIdx === dayIdx && planDragSrc?.topicIdx === topicIdx;
                                    const isDragTarget = planDragOver?.dayIdx === dayIdx && planDragOver?.topicIdx === topicIdx;
-                                   const subjectColor = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                   const subjectColor = (SECTION_COLORS[subject] ?? SECTION_COLORS.QA).badge;
                                    return (
                                      <div key={topicIdx}
-                                       className={`flex items-center gap-2 rounded-lg transition-all ${isEditingPlan ? 'bg-white/5 px-2 py-1.5 group/topic hover:bg-white/10' : ''} ${isSrc ? 'opacity-30' : ''} ${isDone && !isEditingPlan ? 'opacity-40' : ''} ${isDragTarget ? 'border-t-2 border-pink-400' : ''}`}
+                                       className={`flex items-center gap-2 rounded-lg transition-all ${isEditingPlan ? 'bg-white/5 px-2 py-1.5 group/topic hover:bg-white/10' : ''} ${isSrc ? 'opacity-30' : ''} ${isDone && !isEditingPlan ? 'opacity-40' : ''} ${isDragTarget ? 'border-t-2 border-amber-400' : ''}`}
                                        draggable={isEditingPlan}
                                        onDragStart={() => { if (isEditingPlan) { setPlanDragSrc({ dayIdx, topicIdx }); setPlanDragOver(null); } }}
                                        onDragEnd={() => { setPlanDragSrc(null); setPlanDragOver(null); setPlanDragOverDay(null); }}
@@ -1321,13 +1330,13 @@ const handlePanic = () => {
                                        value={topicSearch}
                                        onChange={e => setTopicSearch(e.target.value)}
                                        placeholder="Search topics to add..."
-                                       className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-pink-500/40 placeholder-zinc-600 mb-2"
+                                       className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-zinc-200 outline-none focus:border-amber-500/40 placeholder-zinc-600 mb-2"
                                      />
                                      <div className="max-h-40 overflow-y-auto space-y-0.5 custom-scrollbar">
                                        {unscheduled.length === 0 ? (
                                          <div className="text-xs text-zinc-600 text-center py-3">All topics are already scheduled!</div>
                                        ) : unscheduled.map(({ subject, topic }, i) => {
-                                         const sc = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                         const sc = SECTION_COLORS[subject].badge;
                                          return (
                                            <button key={i} onClick={() => addTopicToDay(dayIdx, subject, topic)}
                                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-left">
@@ -1348,7 +1357,7 @@ const handlePanic = () => {
                    })() : (
                      // CHECKLIST TAB
                      <>
-                       <div className="p-4 text-center border-b border-white/5 bg-gradient-to-b from-pink-500/5 to-transparent">
+                       <div className="p-4 text-center border-b border-white/5 bg-gradient-to-b from-amber-500/5 to-transparent">
                          {daysLeft !== null && daysLeft >= 0 ? (
                            <>
                              <div className="text-5xl font-black text-white mb-1 tabular-nums">{daysLeft}</div>
@@ -1356,7 +1365,7 @@ const handlePanic = () => {
                              {examDate && <div className="text-xs text-zinc-600">{new Date(examDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</div>}
                            </>
                          ) : (
-                           <div className="text-xl font-bold text-pink-400 mb-1">Exam Day! 🌸</div>
+                           <div className="text-xl font-bold text-amber-400 mb-1">Exam Day!</div>
                          )}
                          <div className="mt-3 mb-1">
                            <div className="flex justify-between text-xs text-zinc-500 mb-1.5">
@@ -1364,22 +1373,22 @@ const handlePanic = () => {
                              <span>{Math.round((doneCount / totalTopics) * 100)}%</span>
                            </div>
                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                             <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-500 rounded-full" style={{ width: `${(doneCount / totalTopics) * 100}%` }}/>
+                             <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500 rounded-full" style={{ width: `${(doneCount / totalTopics) * 100}%` }}/>
                            </div>
                          </div>
                          <input type="date" value={examDate} onChange={e => saveExamDate(e.target.value)}
-                           className="mt-2 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-pink-500/50 transition-colors" />
+                           className="mt-2 text-xs bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-zinc-500 focus:outline-none focus:border-amber-500/50 transition-colors" />
                        </div>
                        <div className="flex border-b border-white/5 flex-shrink-0 items-center">
                          <div className="flex flex-1">
-                           {Object.keys(NEET_TOPICS).map(subject => {
-                             const subjectDone = NEET_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
-                             const color = subject === 'Biology' ? 'emerald' : subject === 'Physics' ? 'blue' : 'purple';
+                           {Object.keys(CAT_TOPICS).map(subject => {
+                             const subjectDone = CAT_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
+                             const ring = SECTION_COLORS[subject].solid;
                              return (
                                <button key={subject} onClick={() => setActiveSubject(subject)}
-                                 className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${activeSubject === subject ? `border-${color}-500 text-white` : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
+                                 className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${activeSubject === subject ? `${ring} text-white` : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
                                  {subject}
-                                 <span className="ml-1 opacity-50">{subjectDone}/{NEET_TOPICS[subject].length}</span>
+                                 <span className="ml-1 opacity-50">{subjectDone}/{CAT_TOPICS[subject].length}</span>
                                </button>
                              );
                            })}
@@ -1389,14 +1398,14 @@ const handlePanic = () => {
                          </button>
                        </div>
                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                         {NEET_TOPICS[activeSubject].map((chapter, i) => {
+                         {CAT_TOPICS[activeSubject].map((chapter, i) => {
                            const key = `${activeSubject}_${i}`;
                            const done = !!topicsDone[key];
                            if (showOnlyUnchecked && done) return null;
                            return (
                              <button key={key} onClick={() => toggleTopic(key)}
                                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all border-b border-white/[0.03] hover:bg-white/5 ${done ? 'opacity-50' : ''}`}>
-                               <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${done ? 'bg-pink-500 border-pink-500' : 'border-zinc-700'}`}>
+                               <div className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all ${done ? 'bg-amber-500 border-amber-500' : 'border-zinc-700'}`}>
                                  {done && <Check size={9} className="text-white" strokeWidth={3}/>}
                                </div>
                                <span className={`text-xs ${done ? 'line-through text-zinc-600' : 'text-zinc-300'}`}>{chapter}</span>

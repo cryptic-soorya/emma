@@ -1,283 +1,202 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import {
-  Target, TrendingUp, AlertTriangle, ChevronRight,
-  BarChart2, BookOpen, RotateCcw, Zap,
-} from 'lucide-react';
-import { MockSession, CATSection } from '@/app/lib/catTypes';
+import { useRouter } from 'next/navigation';
+import { BrainCircuit, RotateCcw, AlertTriangle } from 'lucide-react';
+import { MockSession, CATSection, ChapterStat, ErrorType } from '@/app/lib/catTypes';
 
 const SECTIONS: CATSection[] = ['VARC', 'DILR', 'QA'];
-
-const SECTION_COLORS = {
-  VARC: {
-    badge: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-    bar: 'bg-blue-500',
-    card: 'border-blue-500/20 bg-blue-500/5',
-    text: 'text-blue-300',
-  },
-  DILR: {
-    badge: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-    bar: 'bg-purple-500',
-    card: 'border-purple-500/20 bg-purple-500/5',
-    text: 'text-purple-300',
-  },
-  QA: {
-    badge: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    bar: 'bg-amber-500',
-    card: 'border-amber-500/20 bg-amber-500/5',
-    text: 'text-amber-300',
-  },
+const SECTION_COLOR: Record<CATSection, string> = {
+  VARC: 'text-blue-300 border-blue-500/30 bg-blue-500/10',
+  DILR: 'text-purple-300 border-purple-500/30 bg-purple-500/10',
+  QA: 'text-amber-300 border-amber-500/30 bg-amber-500/10',
+};
+const ERROR_LABEL: Record<ErrorType, string> = {
+  calculation: 'Calculation',
+  concept: 'Concept',
+  trap: 'Trap option',
+  rush: 'Rush',
+  careless: 'Careless',
 };
 
-function scoreToPercentile(score: number): number {
-  // Rough estimate based on CAT score distributions
-  if (score >= 150) return 99;
-  if (score >= 130) return 98;
-  if (score >= 115) return 97;
-  if (score >= 100) return 95;
-  if (score >= 85) return 90;
-  if (score >= 70) return 85;
-  if (score >= 55) return 75;
-  if (score >= 40) return 60;
-  if (score >= 25) return 40;
-  return Math.max(1, Math.round((score / 25) * 40));
+function computeChapterStats(session: MockSession): ChapterStat[] {
+  const map: Record<string, ChapterStat> = {};
+  for (const a of session.attempts) {
+    const key = `${a.section}::${a.chapter}::${a.questionType}`;
+    if (!map[key]) {
+      map[key] = {
+        section: a.section, chapter: a.chapter, questionType: a.questionType,
+        totalAttempts: 0, correct: 0, wrong: 0, skipped: 0, accuracy: 0, netScoreImpact: 0, trend: 'stable',
+      };
+    }
+    const stat = map[key];
+    stat.totalAttempts++;
+    if (!a.isAttempted) stat.skipped++;
+    else if (a.isCorrect) { stat.correct++; stat.netScoreImpact += 3; }
+    else if (!a.isTITA) { stat.wrong++; stat.netScoreImpact -= 1; }
+  }
+  for (const stat of Object.values(map)) {
+    const attempted = stat.correct + stat.wrong;
+    stat.accuracy = attempted > 0 ? stat.correct / attempted : 0;
+  }
+  return Object.values(map);
 }
 
 export default function CATResultsPage() {
   const router = useRouter();
-  const [session, setSession] = useState<MockSession | null>(null);
+  const [result, setResult] = useState<MockSession | null>(null);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('catResult');
-    if (!raw) { router.push('/cat'); return; }
-    setSession(JSON.parse(raw));
+    if (!raw) {
+      router.replace('/cat');
+      return;
+    }
+    try {
+      setResult(JSON.parse(raw));
+    } catch {
+      router.replace('/cat');
+    }
   }, [router]);
 
-  if (!session) {
+  const chapterStats = useMemo(() => (result ? computeChapterStats(result) : []), [result]);
+  const skipRecommendations = useMemo(
+    () => chapterStats.filter(s => s.totalAttempts >= 3 && s.netScoreImpact < 0).sort((a, b) => a.netScoreImpact - b.netScoreImpact),
+    [chapterStats]
+  );
+  const errorBreakdown = useMemo(() => {
+    const counts: Record<ErrorType, number> = { calculation: 0, concept: 0, trap: 0, rush: 0, careless: 0 };
+    if (!result) return counts;
+    for (const a of result.attempts) if (a.errorType) counts[a.errorType]++;
+    return counts;
+  }, [result]);
+  const hasErrorData = Object.values(errorBreakdown).some(n => n > 0);
+
+  if (!result) {
     return (
-      <div className="min-h-screen bg-[#0a0f1e] flex items-center justify-center">
-        <div className="text-gray-400 text-sm">Loading results...</div>
+      <div className="min-h-screen bg-[#0a0f1e] text-white flex items-center justify-center">
+        <p className="text-gray-400 text-sm">Loading results...</p>
       </div>
     );
   }
 
-  const percentile = session.percentile ?? scoreToPercentile(session.totalScore);
-  const totalQuestions = session.attempts.length;
-  const totalAttempted = session.attempts.filter(a => a.isAttempted).length;
-  const totalCorrect = session.attempts.filter(a => a.isCorrect).length;
-  const totalWrong = session.attempts.filter(a => a.isAttempted && !a.isCorrect).length;
-  const totalSkipped = totalQuestions - totalAttempted;
-
-  // Skip recommendations from chapterStats
-  const chapterMap: Record<string, { wrong: number; correct: number; section: CATSection; type: string }> = {};
-  for (const a of session.attempts) {
-    const key = `${a.section}::${a.chapter}::${a.questionType}`;
-    if (!chapterMap[key]) chapterMap[key] = { wrong: 0, correct: 0, section: a.section, type: a.questionType };
-    if (a.isAttempted) {
-      if (a.isCorrect) chapterMap[key].correct++;
-      else chapterMap[key].wrong++;
-    }
-  }
-  const skipRecs = Object.entries(chapterMap)
-    .filter(([, v]) => (v.wrong + v.correct) >= 3 && v.wrong > v.correct)
-    .map(([key, v]) => {
-      const [section, chapter] = key.split('::');
-      const netImpact = v.correct * 3 - v.wrong;
-      return { section, chapter, wrong: v.wrong, correct: v.correct, attempted: v.wrong + v.correct, netImpact };
-    })
-    .sort((a, b) => a.netImpact - b.netImpact)
-    .slice(0, 4);
-
-  const wrongQuestions = session.attempts.filter(a => a.isAttempted && !a.isCorrect);
+  const wrongQuestions = result.attempts.filter(a => a.isAttempted && !a.isCorrect);
+  const maxScore = result.attempts.length * 3;
 
   return (
-    <div className="min-h-screen bg-[#0a0f1e] text-white">
-      {/* Header */}
-      <div className="border-b border-gray-800 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Target size={18} className="text-amber-400" />
-          <span className="font-bold text-white">{session.mockName} — Results</span>
-        </div>
-        <Link href="/cat" className="text-gray-500 hover:text-gray-300 text-sm transition-colors">
-          New Mock →
-        </Link>
-      </div>
+    <div className="min-h-screen bg-[#0a0f1e] text-white px-4 py-10">
+      <div className="max-w-5xl mx-auto space-y-10">
+        <header className="text-center space-y-3">
+          <p className="text-xs uppercase tracking-widest text-gray-500">{result.mockName}</p>
+          <h1 className="text-6xl md:text-7xl font-bold tracking-tight font-mono">
+            {result.totalScore}
+            <span className="text-gray-600 text-3xl md:text-4xl"> / {maxScore}</span>
+          </h1>
+          {result.percentile !== undefined && (
+            <p className="text-amber-400 font-semibold">{result.percentile.toFixed(2)} percentile (est.)</p>
+          )}
+        </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-10 space-y-10">
-        {/* Hero score */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-center space-y-3"
-        >
-          <div className="text-7xl font-mono font-black text-amber-400 tracking-tighter">
-            {session.totalScore}
-          </div>
-          <div className="text-gray-400 text-lg">out of 198 · ~{percentile}th percentile</div>
-          <div className="flex justify-center gap-6 text-sm text-gray-400">
-            <span><span className="text-emerald-400 font-bold">{totalCorrect}</span> correct</span>
-            <span><span className="text-red-400 font-bold">{totalWrong}</span> wrong</span>
-            <span><span className="text-gray-500 font-bold">{totalSkipped}</span> skipped</span>
-          </div>
-        </motion.div>
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {SECTIONS.map(sec => {
+            const sr = result.sectionResults[sec];
+            const rushDetected = sr.finalFiveMinAttempts > 3 && (sr.finalFiveMinCorrect / sr.finalFiveMinAttempts) < 0.4;
+            return (
+              <div key={sec} className="rounded-xl border border-gray-800 bg-gray-900/50 p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${SECTION_COLOR[sec]}`}>{sec}</span>
+                  <span className="text-lg font-bold font-mono">{sr.netScore}</span>
+                </div>
+                <div className="space-y-1.5 text-sm">
+                  <div className="flex justify-between text-gray-400"><span>Attempted</span><span className="text-white font-semibold">{sr.attemptCount}</span></div>
+                  <div className="flex justify-between text-gray-400"><span>Correct</span><span className="text-emerald-400 font-semibold">{sr.correctCount}</span></div>
+                  <div className="flex justify-between text-gray-400"><span>Wrong</span><span className="text-red-400 font-semibold">{sr.wrongCount}</span></div>
+                  <div className="flex justify-between text-gray-400"><span>Skipped</span><span className="text-gray-300 font-semibold">{sr.skippedCount}</span></div>
+                </div>
+                {rushDetected && (
+                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-300">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    Rush detected in final 5 min
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
 
-        {/* Section scorecards */}
-        <div>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Section Breakdown</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {SECTIONS.map((sec, i) => {
-              const r = session.sectionResults[sec];
-              const colors = SECTION_COLORS[sec];
-              const accuracy = r.attemptCount > 0 ? Math.round((r.correctCount / r.attemptCount) * 100) : 0;
-              const rushWarning = r.finalFiveMinAttempts > 3 &&
-                (r.finalFiveMinCorrect / (r.finalFiveMinAttempts || 1)) < 0.4;
-              return (
-                <motion.div
-                  key={sec}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className={`rounded-xl border p-5 space-y-3 ${colors.card}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${colors.badge}`}>{sec}</span>
-                    <span className={`font-mono text-xl font-bold ${colors.text}`}>{r.netScore}</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-400">
-                    <span>Attempted: <span className="text-white font-semibold">{r.attemptCount}</span></span>
-                    <span>Correct: <span className="text-emerald-400 font-semibold">{r.correctCount}</span></span>
-                    <span>Wrong: <span className="text-red-400 font-semibold">{r.wrongCount}</span></span>
-                    <span>Skipped: <span className="text-gray-500 font-semibold">{r.skippedCount}</span></span>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Accuracy</span>
-                      <span>{accuracy}%</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                      <div className={`h-full ${colors.bar} rounded-full`} style={{ width: `${accuracy}%` }} />
-                    </div>
-                  </div>
-                  {rushWarning && (
-                    <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                      <Zap size={11} className="fill-amber-400/30" />
-                      Rush detected in final 5 min
-                    </div>
-                  )}
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Skip recommendations */}
-        {skipRecs.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={16} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                Skip Strategy — Recover Marks
-              </h2>
-            </div>
+        {skipRecommendations.length > 0 && (
+          <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 space-y-4">
+            <h2 className="text-lg font-bold tracking-tight">Skip Recommendations</h2>
             <div className="space-y-3">
-              {skipRecs.map((r, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.07 }}
-                  className="flex items-center gap-4 p-4 rounded-xl border border-gray-800 bg-gray-900/50"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-semibold border ${
-                        SECTION_COLORS[r.section as CATSection]?.badge ?? 'bg-gray-800 text-gray-400 border-gray-700'
-                      }`}>{r.section}</span>
-                      <span className="text-sm font-semibold text-white">{r.chapter}</span>
+              {skipRecommendations.map(s => (
+                <div key={`${s.section}-${s.chapter}-${s.questionType}`} className="border-b border-gray-800 last:border-0 pb-3 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${SECTION_COLOR[s.section]}`}>{s.section}</span>
+                      <span className="font-semibold text-white text-sm">{s.chapter}</span>
+                      <span className="text-xs text-gray-500">{s.questionType}</span>
                     </div>
-                    <p className="text-xs text-gray-400">
-                      {r.wrong} wrong out of {r.attempted} — net impact:{' '}
-                      <span className="text-red-400 font-semibold">{r.netImpact} marks</span>
-                    </p>
+                    <span className="text-emerald-400 text-sm font-semibold">Skipping recovers +{Math.abs(s.wrong)} marks</span>
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-emerald-400 font-bold font-mono">
-                      +{r.wrong} marks
-                    </div>
-                    <div className="text-xs text-gray-500">if skipped</div>
-                  </div>
-                </motion.div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {s.wrong} wrong out of {s.totalAttempts - s.skipped} — net impact: {s.netScoreImpact} marks
+                  </p>
+                </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Wrong questions table */}
-        {wrongQuestions.length > 0 && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <BarChart2 size={16} className="text-red-400" />
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                Wrong Questions ({wrongQuestions.length})
-              </h2>
+        <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 space-y-4">
+          <h2 className="text-lg font-bold tracking-tight">Error Breakdown</h2>
+          {hasErrorData ? (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              {(Object.keys(errorBreakdown) as ErrorType[]).map(key => (
+                <div key={key} className="rounded-lg border border-gray-800 bg-gray-900/60 p-3 text-center">
+                  <p className="text-2xl font-bold font-mono text-white">{errorBreakdown[key]}</p>
+                  <p className="text-xs text-gray-400 mt-1">{ERROR_LABEL[key]}</p>
+                </div>
+              ))}
             </div>
-            <div className="rounded-xl border border-gray-800 overflow-hidden">
+          ) : (
+            <p className="text-sm text-gray-500">Classify your wrong answers in Review to build an error profile.</p>
+          )}
+        </section>
+
+        {wrongQuestions.length > 0 && (
+          <section className="rounded-xl border border-gray-800 bg-gray-900/50 p-6 space-y-4">
+            <h2 className="text-lg font-bold tracking-tight">Wrong Questions</h2>
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-800 bg-gray-900/50">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Q#</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Section</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Chapter</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Your Answer</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Correct</th>
+                  <tr className="text-left text-xs uppercase tracking-wider text-gray-500 border-b border-gray-800">
+                    <th className="py-2 pr-4">Section</th>
+                    <th className="py-2 pr-4">Type</th>
+                    <th className="py-2 pr-4">Your Answer</th>
+                    <th className="py-2">Correct</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {wrongQuestions.slice(0, 20).map((a, i) => {
-                    const qIdx = session.attempts.indexOf(a);
-                    return (
-                      <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors">
-                        <td className="px-4 py-3 text-gray-400 font-mono">{qIdx + 1}</td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-semibold border ${
-                            SECTION_COLORS[a.section]?.badge
-                          }`}>{a.section}</span>
-                        </td>
-                        <td className="px-4 py-3 text-gray-300">{a.chapter}</td>
-                        <td className="px-4 py-3 text-red-400 font-mono font-semibold">{a.selectedAnswer ?? '—'}</td>
-                        <td className="px-4 py-3 text-emerald-400 font-mono font-semibold">{a.correctAnswer}</td>
-                      </tr>
-                    );
-                  })}
+                  {wrongQuestions.map((a, i) => (
+                    <tr key={`${a.questionId}-${i}`} className="border-b border-gray-800/60 last:border-0">
+                      <td className="py-2 pr-4"><span className={`px-2 py-0.5 rounded text-xs font-semibold border ${SECTION_COLOR[a.section]}`}>{a.section}</span></td>
+                      <td className="py-2 pr-4 text-gray-400">{a.questionType}</td>
+                      <td className="py-2 pr-4 text-red-400 font-medium">{a.selectedAnswer}</td>
+                      <td className="py-2 text-emerald-400 font-medium">{a.correctAnswer}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
-              {wrongQuestions.length > 20 && (
-                <div className="px-4 py-3 text-center text-xs text-gray-500 border-t border-gray-800">
-                  +{wrongQuestions.length - 20} more in review mode
-                </div>
-              )}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* CTAs */}
-        <div className="flex flex-col sm:flex-row gap-4 pt-4">
-          <Link
-            href="/cat/review"
-            className="flex-1 flex items-center justify-center gap-2 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold transition-colors"
-          >
-            <BookOpen size={18} />
-            Review with Mika
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <Link href="/cat/review" className="flex-1 py-3 px-6 rounded-lg bg-amber-500 text-black font-semibold hover:bg-amber-400 transition-colors flex items-center justify-center gap-2">
+            <BrainCircuit className="w-4 h-4" /> Review with Mika
           </Link>
-          <Link
-            href="/cat"
-            className="flex-1 flex items-center justify-center gap-2 py-4 rounded-xl border border-gray-700 hover:border-gray-500 text-white font-semibold transition-colors"
-          >
-            <RotateCcw size={16} />
-            New Mock
+          <Link href="/cat" className="flex-1 py-3 px-6 rounded-lg border border-gray-800 hover:border-gray-600 text-white font-semibold transition-colors flex items-center justify-center gap-2">
+            <RotateCcw className="w-4 h-4" /> New Mock
           </Link>
         </div>
       </div>

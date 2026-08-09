@@ -2,9 +2,56 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, FileText, Loader2 } from 'lucide-react';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import SpotlightBackground from '@/app/components/SpotlightBackground';
-import { auth } from '@/app/lib/firebase';
+
+interface GeminiFile {
+  name: string;
+  uri: string;
+  mimeType?: string;
+  state?: string;
+}
+
+// Upload a File directly to Gemini File API from the browser.
+// Uses NEXT_PUBLIC_GEMINI_UPLOAD_KEY which should be a referrer-restricted API key.
+async function uploadToGemini(file: File, key: string, displayName: string): Promise<GeminiFile> {
+  const uploadResp = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files?key=${encodeURIComponent(key)}`,
+    {
+      method: 'POST',
+      headers: {
+        'X-Goog-Upload-Protocol': 'raw',
+        'Content-Type': file.type || 'application/pdf',
+        'X-Goog-Upload-File-Name': displayName,
+      },
+      body: file,
+    }
+  );
+  if (!uploadResp.ok) {
+    const text = await uploadResp.text();
+    throw new Error(`Gemini upload failed for ${displayName} (HTTP ${uploadResp.status}): ${text.slice(0, 200)}`);
+  }
+  const json = await uploadResp.json();
+  let info: GeminiFile = json.file;
+  if (!info?.name) throw new Error(`Gemini upload returned no file name for ${displayName}`);
+
+  // Poll until ACTIVE — PDFs go through PROCESSING first
+  const startedAt = Date.now();
+  while (info.state === 'PROCESSING') {
+    if (Date.now() - startedAt > 60_000) {
+      throw new Error(`${displayName} stuck in PROCESSING for >60s`);
+    }
+    await new Promise(r => setTimeout(r, 2000));
+    const pollResp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${info.name}?key=${encodeURIComponent(key)}`
+    );
+    if (!pollResp.ok) throw new Error(`Poll failed for ${displayName}: HTTP ${pollResp.status}`);
+    info = await pollResp.json();
+  }
+  if (info.state !== 'ACTIVE') {
+    throw new Error(`${displayName} upload failed: state=${info.state}`);
+  }
+  return info;
+}
 
 export default function ExamUploadPage() {
   const router = useRouter();
@@ -16,25 +63,31 @@ export default function ExamUploadPage() {
 
   const handleParse = async () => {
     if (!questionPdf || !answerKeyPdf) return;
+    const uploadKey = process.env.NEXT_PUBLIC_GEMINI_UPLOAD_KEY;
+    if (!uploadKey) {
+      setError('NEXT_PUBLIC_GEMINI_UPLOAD_KEY is not configured. Set it in .env.local and Vercel env.');
+      return;
+    }
     setLoading(true);
     setError(null);
 
-    const storage = getStorage();
-    const userId = auth.currentUser?.uid || 'anonymous';
-    const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const qRef = storageRef(storage, `exam-uploads/${userId}/${sessionId}/qp.pdf`);
-    const aRef = storageRef(storage, `exam-uploads/${userId}/${sessionId}/ak.pdf`);
-
     try {
-      setProgress('Uploading PDFs to Firebase Storage...');
-      await Promise.all([uploadBytes(qRef, questionPdf), uploadBytes(aRef, answerKeyPdf)]);
-      const [qUrl, aUrl] = await Promise.all([getDownloadURL(qRef), getDownloadURL(aRef)]);
+      setProgress('Uploading PDFs directly to Gemini (skipping Vercel)...');
+      const [qFile, aFile] = await Promise.all([
+        uploadToGemini(questionPdf, uploadKey, 'qp.pdf'),
+        uploadToGemini(answerKeyPdf, uploadKey, 'ak.pdf'),
+      ]);
 
       setProgress('Gemini is parsing 4 sections in parallel (~1 minute)...');
       const res = await fetch('/api/parse-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionPdfUrl: qUrl, answerKeyPdfUrl: aUrl }),
+        body: JSON.stringify({
+          questionPdfUri: qFile.uri,
+          questionPdfName: qFile.name,
+          answerKeyPdfUri: aFile.uri,
+          answerKeyPdfName: aFile.name,
+        }),
       });
       const raw = await res.text();
       let data: { questions?: unknown; error?: string };
@@ -52,9 +105,6 @@ export default function ExamUploadPage() {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
       setLoading(false);
-    } finally {
-      // Always clean up Storage objects, even on error, to avoid filling the bucket.
-      void Promise.allSettled([deleteObject(qRef), deleteObject(aRef)]).catch(() => {});
     }
   };
 
@@ -62,7 +112,7 @@ export default function ExamUploadPage() {
     <SpotlightBackground>
       <div className="w-full max-w-2xl space-y-8 px-4 text-white">
         <div className="text-center">
-          <h1 className="text-3xl font-bold tracking-tight">NEET Exam Simulator</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Exam Simulator</h1>
           <p className="text-gray-400 mt-2">Upload your question paper and answer key</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

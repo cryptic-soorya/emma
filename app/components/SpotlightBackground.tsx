@@ -30,7 +30,7 @@ export default function SpotlightBackground({
           background: useMotionTemplate`
             radial-gradient(
               650px circle at ${mouseX}px ${mouseY}px,
-              rgba(244, 114, 182, 0.15),
+              rgba(245, 158, 11, 0.15),
               transparent 80%
             )
           `,

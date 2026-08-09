@@ -236,38 +236,36 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { questionPdfUrl, answerKeyPdfUrl, questionPdfBase64, answerKeyPdfBase64 } = body;
-
-    // Prefer URL-based input (Firebase Storage). Falls back to base64 for local dev.
-    let questionBuffer: Buffer;
-    let answerKeyBuffer: Buffer;
-    if (questionPdfUrl && answerKeyPdfUrl) {
-      console.log('Fetching PDFs from Firebase Storage URLs...');
-      const fetchStart = Date.now();
-      const [qResp, aResp] = await Promise.all([fetch(questionPdfUrl), fetch(answerKeyPdfUrl)]);
-      if (!qResp.ok) return NextResponse.json({ error: `Question PDF fetch failed: ${qResp.status}` }, { status: 400 });
-      if (!aResp.ok) return NextResponse.json({ error: `Answer key fetch failed: ${aResp.status}` }, { status: 400 });
-      const [qAb, aAb] = await Promise.all([qResp.arrayBuffer(), aResp.arrayBuffer()]);
-      questionBuffer = Buffer.from(qAb);
-      answerKeyBuffer = Buffer.from(aAb);
-      console.log(`PDFs fetched in ${((Date.now() - fetchStart) / 1000).toFixed(1)}s (qp: ${(questionBuffer.length / 1024 / 1024).toFixed(1)} MB, ak: ${(answerKeyBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
-    } else if (questionPdfBase64 && answerKeyPdfBase64) {
-      questionBuffer = Buffer.from(questionPdfBase64, 'base64');
-      answerKeyBuffer = Buffer.from(answerKeyPdfBase64, 'base64');
-    } else {
-      return NextResponse.json({ error: 'Missing PDF data — provide questionPdfUrl + answerKeyPdfUrl or base64 fallback' }, { status: 400 });
-    }
+    const {
+      questionPdfUri, questionPdfName,
+      answerKeyPdfUri, answerKeyPdfName,
+      questionPdfBase64, answerKeyPdfBase64,
+    } = body;
 
     const fileManager = new GoogleAIFileManager(apiKey);
 
-    console.log('Uploading PDFs to Gemini File API...');
-    const uploadStart = Date.now();
-    [questionFile, answerKeyFile] = await Promise.all([
-      uploadPdf(questionBuffer, 'qp.pdf', fileManager),
-      uploadPdf(answerKeyBuffer, 'ak.pdf', fileManager),
-    ]);
-    console.log(`Uploads ready in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
-
+    if (questionPdfUri && answerKeyPdfUri) {
+      // Client already uploaded directly to Gemini File API — just reference the URIs.
+      // The upload key (NEXT_PUBLIC_GEMINI_UPLOAD_KEY) and server key (GEMINI_API_KEY)
+      // must be in the SAME Google project for the URIs to be readable here.
+      console.log('Using client-uploaded Gemini files:', questionPdfName, answerKeyPdfName);
+      questionFile = { uri: questionPdfUri, mimeType: 'application/pdf', name: questionPdfName || '' };
+      answerKeyFile = { uri: answerKeyPdfUri, mimeType: 'application/pdf', name: answerKeyPdfName || '' };
+    } else if (questionPdfBase64 && answerKeyPdfBase64) {
+      // Legacy / local-dev path: server uploads from base64
+      console.log('Uploading PDFs to Gemini File API (server-side base64 path)...');
+      const uploadStart = Date.now();
+      [questionFile, answerKeyFile] = await Promise.all([
+        uploadPdf(Buffer.from(questionPdfBase64, 'base64'), 'qp.pdf', fileManager),
+        uploadPdf(Buffer.from(answerKeyPdfBase64, 'base64'), 'ak.pdf', fileManager),
+      ]);
+      console.log(`Uploads ready in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
+    } else {
+      return NextResponse.json(
+        { error: 'Missing PDF data — provide questionPdfUri+answerKeyPdfUri (preferred) or base64 fallback' },
+        { status: 400 }
+      );
+    }
     console.log(`Parsing all 4 chunks in parallel. primary=${PRIMARY_MODEL}, fallback=${FALLBACK_MODEL}`);
     const parseStart = Date.now();
     const settled = await Promise.allSettled(
@@ -320,12 +318,12 @@ export async function POST(req: NextRequest) {
     console.error('parse-exam fatal:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   } finally {
-    // Always clean up uploaded files so they don't sit in storage for 48h.
-    if (apiKey && (questionFile || answerKeyFile)) {
+    // Always clean up uploaded files (whether client- or server-uploaded — same project).
+    if (apiKey && (questionFile?.name || answerKeyFile?.name)) {
       const fm = new GoogleAIFileManager(apiKey);
       await Promise.allSettled([
-        questionFile ? fm.deleteFile(questionFile.name) : Promise.resolve(),
-        answerKeyFile ? fm.deleteFile(answerKeyFile.name) : Promise.resolve(),
+        questionFile?.name ? fm.deleteFile(questionFile.name) : Promise.resolve(),
+        answerKeyFile?.name ? fm.deleteFile(answerKeyFile.name) : Promise.resolve(),
       ]);
     }
   }

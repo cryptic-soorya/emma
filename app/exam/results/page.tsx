@@ -2,15 +2,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Sparkles, RotateCcw } from 'lucide-react';
+import { BrainCircuit, RotateCcw } from 'lucide-react';
 import { ExamResult, Subject } from '@/app/lib/examTypes';
 
 const SUBJECTS: Subject[] = ['Physics', 'Chemistry', 'Biology'];
 
 function getGrade(score: number): { label: string; color: string } {
-  if (score >= 600) return { label: 'Excellent', color: 'text-green-400' };
+  if (score >= 600) return { label: 'Excellent', color: 'text-emerald-400' };
   if (score >= 450) return { label: 'Good', color: 'text-blue-400' };
-  if (score >= 300) return { label: 'Average', color: 'text-yellow-400' };
+  if (score >= 300) return { label: 'Average', color: 'text-orange-400' };
   return { label: 'Needs Work', color: 'text-red-400' };
 }
 
@@ -52,7 +52,7 @@ export default function ExamResultsPage() {
           </h1>
           <p className={`text-xl font-semibold ${grade.color}`}>{grade.label}</p>
           <div className="flex justify-center gap-6 text-sm text-gray-400 pt-2">
-            <span><span className="text-green-400 font-semibold">{result.correctCount}</span> correct</span>
+            <span><span className="text-emerald-400 font-semibold">{result.correctCount}</span> correct</span>
             <span><span className="text-red-400 font-semibold">{result.wrongCount}</span> wrong</span>
             <span><span className="text-gray-300 font-semibold">{result.skippedCount}</span> skipped</span>
           </div>
@@ -69,7 +69,7 @@ export default function ExamResultsPage() {
                 </div>
                 <div className="space-y-1.5 text-sm">
                   <div className="flex justify-between text-gray-400">
-                    <span>Correct</span><span className="text-green-400 font-medium">{b.correct}</span>
+                    <span>Correct</span><span className="text-emerald-400 font-medium">{b.correct}</span>
                   </div>
                   <div className="flex justify-between text-gray-400">
                     <span>Wrong</span><span className="text-red-400 font-medium">{b.wrong}</span>
@@ -120,7 +120,7 @@ export default function ExamResultsPage() {
                       <td className="py-2 pr-4 text-gray-300">{q.id}</td>
                       <td className="py-2 pr-4 text-gray-300">{q.subject}</td>
                       <td className="py-2 pr-4 text-gray-400">{q.chapter}</td>
-                      <td className="py-2 text-green-400 font-medium">{q.correctAnswer}</td>
+                      <td className="py-2 text-emerald-400 font-medium">{q.correctAnswer}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -134,7 +134,7 @@ export default function ExamResultsPage() {
             href="/exam/review"
             className="flex-1 py-3 px-6 rounded-xl bg-white text-black font-semibold hover:bg-gray-100 transition-colors flex items-center justify-center gap-2"
           >
-            <Sparkles className="w-4 h-4" />
+            <BrainCircuit className="w-4 h-4" />
             Review with Mika
           </Link>
           <Link

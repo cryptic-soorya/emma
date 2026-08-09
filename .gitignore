@@ -30,6 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# error logger (local dev/demo only, not for commit)
+/logs
+
 # env files (can opt-in for committing if needed)
 .env*
 
@@ -39,3 +42,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.env.local
+
+# firebase admin service account (used only by scripts/seed-cat-questions.ts)
+scripts/service-account.json

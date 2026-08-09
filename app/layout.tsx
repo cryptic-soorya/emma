@@ -2,7 +2,8 @@ import "./globals.css"; // This MUST be here
 import "katex/dist/katex.min.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import CursorSparkles from "./components/CursorSparkles";
+import ErrorLogger from "./components/ErrorLogger";
+// import CursorSparkles from "./components/CursorSparkles";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -17,8 +18,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className} style={{ cursor: "none" }}>
-        <CursorSparkles />
+      <body className={inter.className}>
+        <ErrorLogger />
+        {/* <CursorSparkles /> */}
         {children}
       </body>
     </html>

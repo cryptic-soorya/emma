@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Send, Sparkles, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Send, BrainCircuit, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { ExamResult, ParsedQuestion } from '@/app/lib/examTypes';
 
@@ -52,7 +52,7 @@ export default function ExamReviewPage() {
   if (result.wrongQuestions.length === 0) {
     return (
       <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center px-4 space-y-4">
-        <Sparkles className="w-10 h-10 text-green-400" />
+        <BrainCircuit className="w-10 h-10 text-emerald-400" />
         <h1 className="text-2xl font-bold">No wrong answers!</h1>
         <p className="text-gray-400 text-sm">Nothing to review — go you.</p>
         <Link href="/exam/results" className="mt-2 px-5 py-2 rounded-xl bg-white text-black font-semibold text-sm">Back to results</Link>
@@ -120,13 +120,13 @@ export default function ExamReviewPage() {
                   key={key}
                   className={`px-4 py-3 rounded-xl border text-sm ${
                     isCorrect
-                      ? 'border-green-500 bg-green-500/15 text-white'
+                      ? 'border-emerald-500 bg-emerald-500/15 text-white'
                       : 'border-gray-700 bg-gray-800/40 text-gray-300'
                   }`}
                 >
                   <span className="font-semibold mr-3">{key}.</span>
                   {q.options[key]}
-                  {isCorrect && <span className="ml-2 text-xs text-green-400 font-medium">✓ Correct</span>}
+                  {isCorrect && <span className="ml-2 text-xs text-emerald-400 font-medium">✓ Correct</span>}
                 </div>
               );
             })}
@@ -159,7 +159,7 @@ export default function ExamReviewPage() {
 
         <section className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 space-y-4">
           <div className="flex items-center gap-2 px-2">
-            <Sparkles className="w-4 h-4 text-pink-400" />
+            <BrainCircuit className="w-4 h-4 text-amber-400" />
             <h2 className="text-sm font-semibold">Ask Mika about this question</h2>
           </div>
 
@@ -171,8 +171,8 @@ export default function ExamReviewPage() {
             )}
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold ${msg.role === 'user' ? 'bg-zinc-800 text-gray-300' : 'bg-gradient-to-br from-pink-600 to-purple-600 text-white'}`}>
-                  {msg.role === 'user' ? 'YOU' : <Sparkles size={14} />}
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-semibold ${msg.role === 'user' ? 'bg-zinc-800 text-gray-300' : 'bg-gradient-to-br from-amber-600 to-amber-700 text-white'}`}>
+                  {msg.role === 'user' ? 'YOU' : <BrainCircuit size={14} />}
                 </div>
                 <div className={`max-w-[80%] p-3 rounded-2xl text-sm leading-relaxed ${msg.role === 'user' ? 'bg-zinc-800 border border-white/5' : 'bg-white/5 border border-white/10'}`}>
                   {msg.role === 'model' ? (
@@ -187,8 +187,8 @@ export default function ExamReviewPage() {
             ))}
             {loading && (
               <div className="flex gap-3">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-600 to-purple-600 flex items-center justify-center flex-shrink-0">
-                  <Sparkles size={14} />
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-amber-700 flex items-center justify-center flex-shrink-0">
+                  <BrainCircuit size={14} />
                 </div>
                 <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-sm text-gray-400 flex items-center gap-2">
                   <Loader2 className="w-3 h-3 animate-spin" /> Mika is thinking...
