@@ -1,6 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
+// PDF analysis can take far longer than Vercel's default function limit
+export const maxDuration = 60;
+
 const QUIZ_FORMAT = `
 QUIZ FORMATTING — MANDATORY FOR ALL QUIZZES:
 Format each question EXACTLY like this (each option on its own line, blank line between questions):
