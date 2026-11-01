@@ -2,9 +2,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Upload, FileText, Loader2 } from 'lucide-react';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import SpotlightBackground from '@/app/components/SpotlightBackground';
-import { auth } from '@/app/lib/firebase';
+import { uploadPdfToGemini } from '@/app/lib/geminiUpload';
 
 export default function ExamUploadPage() {
   const router = useRouter();
@@ -19,22 +18,23 @@ export default function ExamUploadPage() {
     setLoading(true);
     setError(null);
 
-    const storage = getStorage();
-    const userId = auth.currentUser?.uid || 'anonymous';
-    const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const qRef = storageRef(storage, `exam-uploads/${userId}/${sessionId}/qp.pdf`);
-    const aRef = storageRef(storage, `exam-uploads/${userId}/${sessionId}/ak.pdf`);
+    const ctrl = new AbortController();
+    const parseTimer = { id: undefined as ReturnType<typeof setTimeout> | undefined };
 
     try {
-      setProgress('Uploading PDFs to Firebase Storage...');
-      await Promise.all([uploadBytes(qRef, questionPdf), uploadBytes(aRef, answerKeyPdf)]);
-      const [qUrl, aUrl] = await Promise.all([getDownloadURL(qRef), getDownloadURL(aRef)]);
+      setProgress('Uploading PDFs...');
+      const [qFile, aFile] = await Promise.all([
+        uploadPdfToGemini(questionPdf, 'exam'),
+        uploadPdfToGemini(answerKeyPdf, 'exam'),
+      ]);
 
       setProgress('Gemini is parsing 4 sections in parallel (~1 minute)...');
+      parseTimer.id = setTimeout(() => ctrl.abort(), 290_000);
       const res = await fetch('/api/parse-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questionPdfUrl: qUrl, answerKeyPdfUrl: aUrl }),
+        body: JSON.stringify({ questionFileName: qFile.name, answerKeyFileName: aFile.name }),
+        signal: ctrl.signal,
       });
       const raw = await res.text();
       let data: { questions?: unknown; error?: string };
@@ -50,11 +50,11 @@ export default function ExamUploadPage() {
       sessionStorage.setItem('examQuestions', JSON.stringify(data.questions));
       router.push('/exam/session');
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      const aborted = ctrl.signal.aborted;
+      setError(aborted ? 'Parsing timed out after ~5 minutes. Please try again.' : err instanceof Error ? err.message : 'Something went wrong');
       setLoading(false);
     } finally {
-      // Always clean up Storage objects, even on error, to avoid filling the bucket.
-      void Promise.allSettled([deleteObject(qRef), deleteObject(aRef)]).catch(() => {});
+      clearTimeout(parseTimer.id);
     }
   };
 

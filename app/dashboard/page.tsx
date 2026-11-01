@@ -29,6 +29,7 @@ import {
 
 // Helpers
 import { compressImage, readPdfBase64 } from "../lib/compress";
+import { uploadPdfToGemini } from "@/app/lib/geminiUpload";
 import { playNeuralTTS, stopAllSpeech } from "../lib/tts"; // IMPORT NEW VOICE ENGINE
 
 import "../globals.css";
@@ -493,20 +494,36 @@ export default function Dashboard() {
       // API CALL
       const historyForApi = messages.slice(-6).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
       
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: textToSend,
-          history: historyForApi,
-          fileData: currentContext?.base64,
-          mimeType: currentContext?.file.type,
-          daysLeft: daysLeft ?? undefined,
-          isPanic,
-          personality,
-        }),
-      });
-      const data = await res.json();
+      // PDFs go browser -> Gemini Files API directly: base64 in the JSON body exceeds the host's ~4.5MB cap.
+      let pdfFileName: string | undefined;
+      if (currentContext?.type === 'pdf') {
+        const uploaded = await uploadPdfToGemini(currentContext.file, 'chat');
+        pdfFileName = uploaded.name;
+      }
+
+      let data: any;
+      const chatCtrl = new AbortController();
+      const chatTimer = setTimeout(() => chatCtrl.abort(), 90_000);
+      try {
+        const res = await fetch("/api/chat", {
+          signal: chatCtrl.signal,
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: textToSend,
+            history: historyForApi,
+            fileName: pdfFileName,
+            fileData: currentContext?.type === 'pdf' ? undefined : currentContext?.base64,
+            mimeType: currentContext?.file.type,
+            daysLeft: daysLeft ?? undefined,
+            isPanic,
+            personality,
+          }),
+        });
+        data = await res.json();
+      } finally {
+        clearTimeout(chatTimer);
+      }
       
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "model",

@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleAIFileManager, FileState } from "@google/generative-ai/server";
 import { NextResponse } from "next/server";
+
+// PDF analysis can take far longer than Vercel's default function limit
+export const maxDuration = 60;
 
 const QUIZ_FORMAT = `
 QUIZ FORMATTING — MANDATORY FOR ALL QUIZZES:
@@ -116,8 +120,28 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const { message, history, fileData, mimeType, daysLeft, isPanic, personality } =
+    const { message, history, fileData, fileName, mimeType, daysLeft, isPanic, personality } =
       await req.json();
+
+    // Large PDFs are uploaded by the browser straight to the Gemini Files API (Vercel caps request
+    // bodies at ~4.5MB); we receive only the file's name and reference it by URI.
+    let uploadedFile: { name: string; uri: string; mimeType: string } | null = null;
+    const fileManager = new GoogleAIFileManager(apiKey);
+    if (fileName) {
+      if (typeof fileName !== "string" || !/^files\/[\w-]+$/.test(fileName)) {
+        return NextResponse.json({ error: "Invalid file reference" }, { status: 400 });
+      }
+      let f = await fileManager.getFile(fileName);
+      const startedAt = Date.now();
+      while (f.state === FileState.PROCESSING && Date.now() - startedAt < 60_000) {
+        await new Promise(r => setTimeout(r, 1500));
+        f = await fileManager.getFile(fileName);
+      }
+      if (f.state !== FileState.ACTIVE) {
+        return NextResponse.json({ error: `PDF not ready (state=${f.state})` }, { status: 400 });
+      }
+      uploadedFile = { name: f.name, uri: f.uri, mimeType: f.mimeType };
+    }
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash-lite",
@@ -131,19 +155,22 @@ export async function POST(req: Request) {
 
     const promptParts: any[] = [{ text: message }];
 
-    if (fileData) {
-      promptParts.push({
-        inlineData: {
-          data: fileData,
-          mimeType: mimeType || "application/pdf",
-        },
-      });
+    if (uploadedFile) {
+      promptParts.push({ fileData: { mimeType: uploadedFile.mimeType, fileUri: uploadedFile.uri } });
+    } else if (fileData) {
+      promptParts.push({ inlineData: { data: fileData, mimeType: mimeType || "application/pdf" } });
     }
 
     const chat = model.startChat({ history: recentHistory });
-    const result = await chat.sendMessage(promptParts);
+    let text: string;
+    try {
+      const result = await chat.sendMessage(promptParts);
+      text = result.response.text();
+    } finally {
+      if (uploadedFile) void fileManager.deleteFile(uploadedFile.name).catch(() => {});
+    }
 
-    return NextResponse.json({ response: result.response.text() });
+    return NextResponse.json({ response: text });
   } catch (error: any) {
     console.error("🔥 SERVER ERROR:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });

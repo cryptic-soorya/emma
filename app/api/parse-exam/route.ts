@@ -118,6 +118,18 @@ async function uploadPdf(
   }
 }
 
+async function waitUntilActive(name: string, fileManager: GoogleAIFileManager): Promise<UploadedFile> {
+  const startedAt = Date.now();
+  let file = await fileManager.getFile(name);
+  while (file.state === FileState.PROCESSING) {
+    if (Date.now() - startedAt > 60_000) throw new Error(`${name} stuck in PROCESSING for >60s`);
+    await new Promise(r => setTimeout(r, 2000));
+    file = await fileManager.getFile(name);
+  }
+  if (file.state !== FileState.ACTIVE) throw new Error(`${name} is not usable: state=${file.state}`);
+  return { uri: file.uri, mimeType: file.mimeType, name: file.name };
+}
+
 function parseRetryDelaySec(msg: string): number | null {
   const m = msg.match(/retry in ([\d.]+)s/i);
   if (m) return Math.min(60, Math.ceil(parseFloat(m[1])));
@@ -236,37 +248,43 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { questionPdfUrl, answerKeyPdfUrl, questionPdfBase64, answerKeyPdfBase64 } = body;
-
-    // Prefer URL-based input (Firebase Storage). Falls back to base64 for local dev.
-    let questionBuffer: Buffer;
-    let answerKeyBuffer: Buffer;
-    if (questionPdfUrl && answerKeyPdfUrl) {
-      console.log('Fetching PDFs from Firebase Storage URLs...');
-      const fetchStart = Date.now();
-      const [qResp, aResp] = await Promise.all([fetch(questionPdfUrl), fetch(answerKeyPdfUrl)]);
-      if (!qResp.ok) return NextResponse.json({ error: `Question PDF fetch failed: ${qResp.status}` }, { status: 400 });
-      if (!aResp.ok) return NextResponse.json({ error: `Answer key fetch failed: ${aResp.status}` }, { status: 400 });
-      const [qAb, aAb] = await Promise.all([qResp.arrayBuffer(), aResp.arrayBuffer()]);
-      questionBuffer = Buffer.from(qAb);
-      answerKeyBuffer = Buffer.from(aAb);
-      console.log(`PDFs fetched in ${((Date.now() - fetchStart) / 1000).toFixed(1)}s (qp: ${(questionBuffer.length / 1024 / 1024).toFixed(1)} MB, ak: ${(answerKeyBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
-    } else if (questionPdfBase64 && answerKeyPdfBase64) {
-      questionBuffer = Buffer.from(questionPdfBase64, 'base64');
-      answerKeyBuffer = Buffer.from(answerKeyPdfBase64, 'base64');
-    } else {
-      return NextResponse.json({ error: 'Missing PDF data — provide questionPdfUrl + answerKeyPdfUrl or base64 fallback' }, { status: 400 });
-    }
-
+    const { questionFileName, answerKeyFileName, questionPdfUrl, answerKeyPdfUrl, questionPdfBase64, answerKeyPdfBase64 } = body;
     const fileManager = new GoogleAIFileManager(apiKey);
 
-    console.log('Uploading PDFs to Gemini File API...');
-    const uploadStart = Date.now();
-    [questionFile, answerKeyFile] = await Promise.all([
-      uploadPdf(questionBuffer, 'qp.pdf', fileManager),
-      uploadPdf(answerKeyBuffer, 'ak.pdf', fileManager),
-    ]);
-    console.log(`Uploads ready in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
+    if (questionFileName && answerKeyFileName) {
+      // Preferred: the browser already uploaded both PDFs straight to the Gemini Files API.
+      for (const n of [questionFileName, answerKeyFileName]) {
+        if (typeof n !== 'string' || !/^files\/[\w-]+$/.test(n)) {
+          return NextResponse.json({ error: 'Invalid file reference' }, { status: 400 });
+        }
+      }
+      // Track names for cleanup first, then wait for processing to finish.
+      questionFile = { uri: '', mimeType: 'application/pdf', name: questionFileName };
+      answerKeyFile = { uri: '', mimeType: 'application/pdf', name: answerKeyFileName };
+      [questionFile, answerKeyFile] = await Promise.all([
+        waitUntilActive(questionFileName, fileManager),
+        waitUntilActive(answerKeyFileName, fileManager),
+      ]);
+    } else {
+      let questionBuffer: Buffer;
+      let answerKeyBuffer: Buffer;
+      if (questionPdfUrl && answerKeyPdfUrl) {
+        const [qResp, aResp] = await Promise.all([fetch(questionPdfUrl), fetch(answerKeyPdfUrl)]);
+        if (!qResp.ok) return NextResponse.json({ error: `Question PDF fetch failed: ${qResp.status}` }, { status: 400 });
+        if (!aResp.ok) return NextResponse.json({ error: `Answer key fetch failed: ${aResp.status}` }, { status: 400 });
+        questionBuffer = Buffer.from(await qResp.arrayBuffer());
+        answerKeyBuffer = Buffer.from(await aResp.arrayBuffer());
+      } else if (questionPdfBase64 && answerKeyPdfBase64) {
+        questionBuffer = Buffer.from(questionPdfBase64, 'base64');
+        answerKeyBuffer = Buffer.from(answerKeyPdfBase64, 'base64');
+      } else {
+        return NextResponse.json({ error: 'Missing PDF data — provide questionFileName + answerKeyFileName' }, { status: 400 });
+      }
+      [questionFile, answerKeyFile] = await Promise.all([
+        uploadPdf(questionBuffer, 'qp.pdf', fileManager),
+        uploadPdf(answerKeyBuffer, 'ak.pdf', fileManager),
+      ]);
+    }
 
     console.log(`Parsing all 4 chunks in parallel. primary=${PRIMARY_MODEL}, fallback=${FALLBACK_MODEL}`);
     const parseStart = Date.now();
