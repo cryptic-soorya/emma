@@ -32,7 +32,7 @@ async function api(body: object, signal: AbortSignal) {
 }
 
 // Must be a multiple of 256KB (Google requirement) and stay under Vercel's ~4.5MB body cap.
-const CHUNK_SIZE = 12 * 256 * 1024; // 3,145,728 bytes
+const CHUNK_SIZE = 4 * 256 * 1024; // 1 MB: small bodies survive flaky networks / TLS middleboxes
 
 /**
  * Uploads a PDF to the Gemini Files API by relaying it in chunks through our own server
@@ -57,7 +57,8 @@ export async function uploadPdfToGemini(
     const qs = new URLSearchParams({ uploadUrl, offset: String(offset), final: isFinal ? '1' : '0' });
 
     let lastErr: unknown;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 800 * attempt));
       try {
         const data = await withTimeout(perChunkTimeout, `Uploading ${file.name}`, async signal => {
           const res = await fetch(`/api/gemini-upload-chunk?${qs}`, {
