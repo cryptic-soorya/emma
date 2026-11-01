@@ -29,7 +29,7 @@ import {
 
 // Helpers
 import { compressImage, readPdfBase64 } from "../lib/compress";
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
+import { uploadPdfToGemini } from "@/app/lib/geminiUpload";
 import { playNeuralTTS, stopAllSpeech } from "../lib/tts"; // IMPORT NEW VOICE ENGINE
 
 import "../globals.css";
@@ -494,26 +494,25 @@ export default function Dashboard() {
       // API CALL
       const historyForApi = messages.slice(-6).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
       
-      // PDFs go via Firebase Storage: base64 in the JSON body exceeds the host's ~4.5MB request cap.
-      // Reuses the exam-uploads/{uid}/{id}/{file} path shape that Storage rules already allow.
-      let pdfUrl: string | undefined;
-      let pdfRef: ReturnType<typeof storageRef> | null = null;
+      // PDFs go browser -> Gemini Files API directly: base64 in the JSON body exceeds the host's ~4.5MB cap.
+      let pdfFileName: string | undefined;
       if (currentContext?.type === 'pdf') {
-        const uploadId = crypto.randomUUID();
-        pdfRef = storageRef(getStorage(), `exam-uploads/${user.uid}/${uploadId}/chat.pdf`);
-        await uploadBytes(pdfRef, currentContext.file);
-        pdfUrl = await getDownloadURL(pdfRef);
+        const uploaded = await uploadPdfToGemini(currentContext.file, 'chat');
+        pdfFileName = uploaded.name;
       }
 
       let data: any;
+      const chatCtrl = new AbortController();
+      const chatTimer = setTimeout(() => chatCtrl.abort(), 90_000);
       try {
         const res = await fetch("/api/chat", {
+          signal: chatCtrl.signal,
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             message: textToSend,
             history: historyForApi,
-            fileUrl: pdfUrl,
+            fileName: pdfFileName,
             fileData: currentContext?.type === 'pdf' ? undefined : currentContext?.base64,
             mimeType: currentContext?.file.type,
             daysLeft: daysLeft ?? undefined,
@@ -523,7 +522,7 @@ export default function Dashboard() {
         });
         data = await res.json();
       } finally {
-        if (pdfRef) void deleteObject(pdfRef).catch(() => {});
+        clearTimeout(chatTimer);
       }
       
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
