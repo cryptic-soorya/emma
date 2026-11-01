@@ -42,4 +42,6 @@ next-env.d.ts
 
 # local-only secrets and logs
 /scripts/service-account.json
+# local-only secrets and logs
+/scripts/service-account.json
 /logs/
