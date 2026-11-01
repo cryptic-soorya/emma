@@ -119,8 +119,22 @@ export async function POST(req: Request) {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const { message, history, fileData, mimeType, daysLeft, isPanic, personality } =
+    const { message, history, fileData, fileUrl, mimeType, daysLeft, isPanic, personality } =
       await req.json();
+
+    // Large PDFs arrive as a Storage URL (browser->server body cap is ~4.5MB on Vercel).
+    let resolvedFileData: string | undefined = fileData;
+    if (fileUrl) {
+      const u = new URL(fileUrl);
+      if (u.protocol !== "https:" || u.hostname !== "firebasestorage.googleapis.com") {
+        return NextResponse.json({ error: "Invalid file URL" }, { status: 400 });
+      }
+      const fileResp = await fetch(fileUrl);
+      if (!fileResp.ok) {
+        return NextResponse.json({ error: `PDF fetch failed: ${fileResp.status}` }, { status: 400 });
+      }
+      resolvedFileData = Buffer.from(await fileResp.arrayBuffer()).toString("base64");
+    }
 
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash-lite",
@@ -134,10 +148,10 @@ export async function POST(req: Request) {
 
     const promptParts: any[] = [{ text: message }];
 
-    if (fileData) {
+    if (resolvedFileData) {
       promptParts.push({
         inlineData: {
-          data: fileData,
+          data: resolvedFileData,
           mimeType: mimeType || "application/pdf",
         },
       });

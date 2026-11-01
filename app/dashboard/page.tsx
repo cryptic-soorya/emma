@@ -29,6 +29,7 @@ import {
 
 // Helpers
 import { compressImage, readPdfBase64 } from "../lib/compress";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { playNeuralTTS, stopAllSpeech } from "../lib/tts"; // IMPORT NEW VOICE ENGINE
 
 import "../globals.css";
@@ -493,20 +494,37 @@ export default function Dashboard() {
       // API CALL
       const historyForApi = messages.slice(-6).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
       
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: textToSend,
-          history: historyForApi,
-          fileData: currentContext?.base64,
-          mimeType: currentContext?.file.type,
-          daysLeft: daysLeft ?? undefined,
-          isPanic,
-          personality,
-        }),
-      });
-      const data = await res.json();
+      // PDFs go via Firebase Storage: base64 in the JSON body exceeds the host's ~4.5MB request cap.
+      // Reuses the exam-uploads/{uid}/{id}/{file} path shape that Storage rules already allow.
+      let pdfUrl: string | undefined;
+      let pdfRef: ReturnType<typeof storageRef> | null = null;
+      if (currentContext?.type === 'pdf') {
+        const uploadId = crypto.randomUUID();
+        pdfRef = storageRef(getStorage(), `exam-uploads/${user.uid}/${uploadId}/chat.pdf`);
+        await uploadBytes(pdfRef, currentContext.file);
+        pdfUrl = await getDownloadURL(pdfRef);
+      }
+
+      let data: any;
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: textToSend,
+            history: historyForApi,
+            fileUrl: pdfUrl,
+            fileData: currentContext?.type === 'pdf' ? undefined : currentContext?.base64,
+            mimeType: currentContext?.file.type,
+            daysLeft: daysLeft ?? undefined,
+            isPanic,
+            personality,
+          }),
+        });
+        data = await res.json();
+      } finally {
+        if (pdfRef) void deleteObject(pdfRef).catch(() => {});
+      }
       
       await addDoc(collection(db, "users", user.uid, "chats", chatId, "messages"), {
         role: "model",
