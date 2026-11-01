@@ -18,7 +18,7 @@ const quotes = [
 export default function Landing() {
   const router = useRouter();
   const [quote, setQuote] = useState("");
-  const [userName, setUserName] = useState("Doctor");
+  const [userName, setUserName] = useState("Designer");
 
   useEffect(() => {
     setQuote(quotes[Math.floor(Math.random() * quotes.length)]);

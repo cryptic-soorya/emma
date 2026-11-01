@@ -52,77 +52,52 @@ const SakuraRain = () => {
   );
 };
 
-const NEET_TOPICS: Record<string, string[]> = {
-  Biology: [
-    'The Living World','Biological Classification','Plant Kingdom','Animal Kingdom',
-    'Morphology of Flowering Plants','Anatomy of Flowering Plants','Structural Organisation in Animals',
-    'Cell: The Unit of Life','Biomolecules','Cell Cycle and Cell Division',
-    'Transport in Plants','Mineral Nutrition','Photosynthesis in Higher Plants',
-    'Respiration in Plants','Plant Growth and Development',
-    'Digestion and Absorption','Breathing and Exchange of Gases',
-    'Body Fluids and Circulation','Excretory Products and Elimination',
-    'Locomotion and Movement','Neural Control and Coordination','Chemical Coordination',
-    'Reproduction in Organisms','Sexual Reproduction in Flowering Plants',
-    'Human Reproduction','Reproductive Health',
-    'Principles of Inheritance and Variation','Molecular Basis of Inheritance','Evolution',
-    'Human Health and Disease','Microbes in Human Welfare',
-    'Biotechnology: Principles and Processes','Biotechnology and its Applications',
-    'Organisms and Populations','Ecosystem','Biodiversity and Conservation','Environmental Issues',
+const TOPICS: Record<string, string[]> = {
+  'Design': [
+    'Elements of Design','Principles of Design','Colour Theory & the Colour Wheel','Colour Harmonies & Moods',
+    'Basic Sketching & Perspective','Fashion Figure Drawing & Croquis','Drawing Garment Details & Silhouettes',
+    'Rendering Fabrics & Textures','Mood Boards & Inspiration Research','Design Process & Concept Development',
+    'Intro to Digital Tools (Illustrator / Photoshop)','Sketchbook & Portfolio Basics',
   ],
-  Physics: [
-    'Units and Measurement','Motion in a Straight Line','Motion in a Plane',
-    'Laws of Motion','Work, Energy and Power','System of Particles and Rotational Motion',
-    'Gravitation','Mechanical Properties of Solids','Mechanical Properties of Fluids',
-    'Thermal Properties of Matter','Thermodynamics','Kinetic Theory',
-    'Oscillations','Waves','Electric Charges and Fields',
-    'Electrostatic Potential and Capacitance','Current Electricity',
-    'Moving Charges and Magnetism','Magnetism and Matter',
-    'Electromagnetic Induction','Alternating Current','Electromagnetic Waves',
-    'Ray Optics and Optical Instruments','Wave Optics',
-    'Dual Nature of Radiation and Matter','Atoms','Nuclei','Semiconductor Electronics',
+  'Textiles & Craft': [
+    'Natural & Synthetic Fibres','Yarn Making & Spinning','Weaving: Plain, Twill & Satin','Knitting Basics',
+    'Dyeing, Printing & Fabric Finishes','Fabric Testing, Care & Labelling',
+    'Body Measurements & Size Charts','Basic Blocks & Pattern Making','Dart Manipulation',
+    'Sewing Machine & Stitch Types','Seams & Seam Finishes','Garment Components (Collars, Sleeves, Pockets)',
+    'Draping Basics','Fabric Estimation & Costing',
   ],
-  Chemistry: [
-    'Some Basic Concepts of Chemistry','Structure of Atom',
-    'Classification of Elements and Periodicity','Chemical Bonding and Molecular Structure',
-    'States of Matter','Chemical Thermodynamics','Equilibrium','Redox Reactions',
-    'Hydrogen','s-Block Elements','p-Block Elements (13 & 14)',
-    'Organic Chemistry: Basic Principles','Hydrocarbons','Environmental Chemistry',
-    'Solid State','Solutions','Electrochemistry','Chemical Kinetics','Surface Chemistry',
-    'General Principles of Isolation of Elements','d and f Block Elements',
-    'Coordination Compounds','Haloalkanes and Haloarenes',
-    'Alcohols, Phenols and Ethers','Aldehydes, Ketones and Carboxylic Acids',
-    'Amines','Biomolecules','Polymers','Chemistry in Everyday Life',
+  'Fashion & Culture': [
+    'Fashion History: Ancient to Renaissance','Fashion History: 18th–19th Century','20th-Century Fashion Decades',
+    'Indian Traditional Costumes','Indian Textiles & Craft Clusters','Famous Designers & Fashion Houses',
+    'Fashion Terminology','Trends & Forecasting','Fashion Industry & Supply Chain',
+    'Sustainable & Ethical Fashion','Communication & English','Basic Maths for Design (Ratios, Scale)',
+    'General Awareness & Current Affairs','Study Skills & Time Management',
   ],
 };
 
 const FORMULAS: Record<string, { category: string; items: string[] }[]> = {
-  Physics: [
-    { category: "Kinematics", items: ["v = u + at", "s = ut + ½at²", "v² = u² + 2as", "s = (u+v)t/2"] },
-    { category: "Force & Momentum", items: ["F = ma", "p = mv", "Impulse = FΔt = Δp", "Work = Fs cosθ"] },
-    { category: "Energy", items: ["KE = ½mv²", "PE = mgh", "Power = W/t = Fv", "η = W_out/W_in"] },
-    { category: "Circular & Gravity", items: ["a = v²/r = ω²r", "F = mv²/r", "g = GM/R²", "T² ∝ r³ (Kepler)"] },
-    { category: "SHM & Waves", items: ["T = 2π√(l/g)", "T = 2π√(m/k)", "v = fλ", "I ∝ A² ∝ 1/r²"] },
-    { category: "Electricity", items: ["V = IR", "P = VI = I²R = V²/R", "C = Q/V", "Series: R = R₁+R₂"] },
-    { category: "Optics", items: ["1/f = 1/v − 1/u", "m = −v/u", "n = sin i / sin r", "n = c/v"] },
-    { category: "Modern Physics", items: ["E = hf = hc/λ", "KE_max = hf − φ", "E = mc²", "λ = h/mv (de Broglie)"] },
+  'Design': [
+    { category: "Elements of Design", items: ["Line", "Shape & Form", "Space", "Colour", "Texture", "Pattern"] },
+    { category: "Principles of Design", items: ["Balance (symmetrical / asymmetrical)", "Proportion & Scale", "Rhythm & Repetition", "Emphasis (focal point)", "Harmony & Unity"] },
+    { category: "Colour Wheel", items: ["Primary: Red, Yellow, Blue", "Secondary: Orange, Green, Violet", "Tertiary: primary + neighbouring secondary", "Warm vs Cool colours"] },
+    { category: "Colour Properties", items: ["Hue = the colour itself", "Value = lightness / darkness", "Saturation (Chroma) = intensity", "Tint = + white | Shade = + black | Tone = + grey"] },
+    { category: "Colour Harmonies", items: ["Monochromatic: one hue", "Analogous: neighbours", "Complementary: opposites", "Triadic: 3 evenly spaced", "Split-complementary"] },
+    { category: "Fashion Figure", items: ["Real figure: ~7.5–8 heads tall", "Fashion croquis: ~9–10 heads tall (elongated)", "Draw on a centre balance line", "Exaggerate legs for elegance"] },
   ],
-  Chemistry: [
-    { category: "Mole Concept", items: ["n = m/M", "N = n × 6.022×10²³", "PV = nRT (R = 8.314)", "% = (mass/total)×100"] },
-    { category: "Solutions", items: ["M = n/V(L)", "m = n/w(kg)", "χ = n₁/(n₁+n₂)", "ppm = (m_solute/m_solution)×10⁶"] },
-    { category: "Colligative", items: ["ΔTb = Kb·m", "ΔTf = Kf·m", "π = MRT", "Relative lowering = χ_solute"] },
-    { category: "Kinetics", items: ["r = k[A]ⁿ", "t½ = 0.693/k (1st order)", "k = Ae^(−Ea/RT) (Arrhenius)", "t½ = 1/(k[A]₀) (2nd order)"] },
-    { category: "Equilibrium", items: ["Kc = [P]^p/[R]^r", "Kp = Kc(RT)^Δn", "Q < Kc: forward", "Le Chatelier's principle"] },
-    { category: "Electrochemistry", items: ["E°cell = E°cathode − E°anode", "ΔG° = −nFE°", "E = E° − (0.0592/n)log Q", "W = nFE"] },
-    { category: "Acids & Bases", items: ["pH = −log[H⁺]", "pOH = −log[OH⁻]", "pH + pOH = 14", "pH = pKa + log([A⁻]/[HA])"] },
+  'Textiles & Craft': [
+    { category: "Fibres", items: ["Natural plant: cotton, linen, jute", "Natural animal: wool, silk", "Regenerated: viscose / rayon", "Synthetic: polyester, nylon, acrylic"] },
+    { category: "Weaves", items: ["Plain: over-1 under-1 (strong, simple)", "Twill: diagonal ribs (denim, gabardine)", "Satin: long floats (lustrous, smooth)", "Warp = lengthwise | Weft = crosswise"] },
+    { category: "Knits", items: ["Weft knit: jersey, rib (stretchy)", "Warp knit: tricot (stable)", "Knits stretch more than wovens", "Use a ballpoint needle for knits"] },
+    { category: "Grain & Pattern", items: ["Straight grain: parallel to selvedge", "Cross grain: weft direction", "Bias: 45° (max stretch & drape)", "Match grainline arrow with selvedge"] },
+    { category: "Measurements", items: ["Seam allowance: commonly 1.5 cm (⅝ in)", "Ease = extra room beyond body size", "GSM = fabric weight in grams per m²", "Take measurements over light clothing"] },
+    { category: "Stitching", items: ["Straight stitch: general seams", "Zigzag: finishing / stretch", "Backstitch: lock the ends", "Basting: temporary long stitch"] },
   ],
-  Biology: [
-    { category: "Cell Division", items: ["Mitosis: PMAT (2n→2n)", "Meiosis: crossing over in Prophase I", "S phase: DNA replication", "G1+S+G2+M = cell cycle"] },
-    { category: "DNA & Gene", items: ["A=T (2H bonds), G≡C (3H bonds)", "Chargaff: %A=%T, %G=%C", "Transcription: DNA→mRNA", "Translation: mRNA→protein (codons=3 bases)"] },
-    { category: "Photosynthesis", items: ["6CO₂+6H₂O → C₆H₁₂O₆+6O₂", "Light rxn: H₂O→O₂+ATP+NADPH (thylakoid)", "Calvin: CO₂+ATP+NADPH→G3P (stroma)", "C4: CO₂ fixed by PEP carboxylase"] },
-    { category: "Respiration", items: ["Glycolysis: Glucose→2 Pyruvate (2 ATP, cytoplasm)", "Krebs: 2 Acetyl-CoA→CO₂+8 NADH+2 FADH₂", "ETC: 34 ATP (inner mitochondrial membrane)", "Total aerobic: ~38 ATP per glucose"] },
-    { category: "Circulation", items: ["RA→RV→Pulmonary→Lungs→LA→LV→Aorta", "SA node: pacemaker of heart", "ABO: A(IAIA/IAi), B(IBIB/IBi), O(ii), AB(IAIB)", "Rh+: dominant, Erythroblastosis if Rh− mother"] },
-    { category: "Hormones", items: ["ADH: water reabsorption (DCT/CD)", "Insulin↓glucose | Glucagon↑glucose", "TSH→T3/T4 | ACTH→Cortisol | LH surge→Ovulation", "GH from anterior pituitary | Oxytocin from posterior"] },
-    { category: "Genetics", items: ["Mendel: Law of Segregation + Independent Assortment", "Test cross: unknown × recessive homozygous", "Incomplete dominance: 1:2:1 phenotype ratio", "Codominance: both alleles expressed (e.g. AB blood)"] },
+  'Fashion & Culture': [
+    { category: "Fashion Terms", items: ["Haute couture: made-to-measure, high craftsmanship", "Prêt-à-porter: ready-to-wear", "Silhouette: overall outline of a garment", "Collection: group of designs for a season"] },
+    { category: "Fashion Weeks", items: ["Big 4: Paris, Milan, London, New York", "Seasons: Spring/Summer & Autumn/Winter", "Indian: Lakmé Fashion Week, FDCI India Couture Week"] },
+    { category: "Decades", items: ["1920s: flapper, drop waist", "1947: Dior's 'New Look'", "1960s: mod, mini skirt", "1970s: bell-bottoms, boho", "1980s: power shoulders", "1990s: minimalism & grunge"] },
+    { category: "Indian Textiles", items: ["Banarasi: Varanasi brocade", "Kanjeevaram: Tamil Nadu silk", "Bandhani: Gujarat/Rajasthan tie-dye", "Ikat / Patola: Odisha & Gujarat", "Chikankari: Lucknow embroidery", "Phulkari: Punjab embroidery", "Kalamkari: Andhra Pradesh hand-painted/printed"] },
+    { category: "Study Habits", items: ["Pomodoro: 25 min work / 5 min break", "Review notes within 24 hours", "Sketch daily — even 10 minutes", "Keep a reference / inspiration folder"] },
   ],
 };
 
@@ -157,7 +132,7 @@ export default function Dashboard() {
   // Exam / Topics / Spaced Repetition
   const [examDate, setExamDate] = useState('');
   const [topicsDone, setTopicsDone] = useState<Record<string, boolean>>({});
-  const [activeSubject, setActiveSubject] = useState('Biology');
+  const [activeSubject, setActiveSubject] = useState('Design');
   const [reviewMode, setReviewMode] = useState(false);
   const [reviewQueue, setReviewQueue] = useState<any[]>([]);
   const [reviewIndex, setReviewIndex] = useState(0);
@@ -170,7 +145,7 @@ export default function Dashboard() {
   const [goals, setGoals] = useState<{id: string, text: string, done: boolean}[]>([]);
   const [goalInput, setGoalInput] = useState('');
   // Formula sheet subject tab
-  const [formulaSubject, setFormulaSubject] = useState('Physics');
+  const [formulaSubject, setFormulaSubject] = useState('Design');
   // Plan sidebar sub-tab
   const [planTab, setPlanTab] = useState<'revisionplan' | 'checklist'>('revisionplan');
   const [customRevisionPlan, setCustomRevisionPlan] = useState<{day: number; date: string; topics: {subject: string; topic: string}[]}[] | null>(null);
@@ -316,7 +291,7 @@ export default function Dashboard() {
     const exam = new Date(examDate + 'T00:00:00');
     return Math.ceil((exam.getTime() - today.getTime()) / 86400000);
   })() : null;
-  const totalTopics = Object.values(NEET_TOPICS).flat().length;
+  const totalTopics = Object.values(TOPICS).flat().length;
   const doneCount = Object.values(topicsDone).filter(Boolean).length;
   const dueForReview = mistakes.filter(m => !m.nextReviewDate || m.nextReviewDate <= new Date().toISOString().split('T')[0]);
 
@@ -550,8 +525,8 @@ const saveToMistakes = async (msg: any) => {
   const msgIndex = messages.findIndex(m => m.id === msg.id);
   let question = msgIndex > 0 ? messages[msgIndex - 1].text : "Context Question";
   
-  if (question.includes("Generate 3 NEET-style")) {
-    question = "NEET Quiz Revision";
+  if (question.includes("Generate 3 Multiple Choice")) {
+    question = "Quiz Revision";
   }
 
   try {
@@ -580,14 +555,14 @@ Do NOT write all options on one line. Do NOT use LaTeX ($...$) — write formula
 
 const handleGenerateQuiz = () => {
   if (!activeSessionId) return alert("Start a chat or upload a PDF first!");
-  performSend(`Generate 3 NEET-style Multiple Choice Questions based on our current topic or the attached document.${QUIZ_FORMAT_INSTRUCTION}
+  performSend(`Generate 3 Multiple Choice Questions based on our current topic or the attached document, pitched at first-year college level.${QUIZ_FORMAT_INSTRUCTION}
 
 Put all answers at the very bottom inside a <details> block.`, true);
 };
 
 const handleBlitzQuiz = () => {
   if (!activeSessionId) return alert("Start a chat first!");
-  performSend(`Generate 10 rapid-fire NEET-style MCQs on our current topic. Exam-level difficulty.${QUIZ_FORMAT_INSTRUCTION}
+  performSend(`Generate 10 rapid-fire MCQs on our current topic. Exam-level difficulty for a first-year student.${QUIZ_FORMAT_INSTRUCTION}
 
 Put all answers at the very bottom inside a <details> block.`, true);
 };
@@ -626,7 +601,7 @@ const handlePanic = () => {
   };
 
   // --- ANALYTICS & WEAK TOPIC RADAR ---
-  const subjectStats = Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+  const subjectStats = Object.entries(TOPICS).map(([subject, topics]) => {
     const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
     return { subject, done, total: topics.length, pct: Math.round((done / topics.length) * 100) };
   }).sort((a, b) => a.pct - b.pct);
@@ -637,7 +612,7 @@ const handlePanic = () => {
   const generateRevisionPlan = () => {
     if (!daysLeft || daysLeft <= 0) return [];
     const remaining: { subject: string; topic: string }[] = [];
-    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+    Object.entries(TOPICS).forEach(([subject, topics]) => {
       topics.forEach((topic, i) => {
         if (!topicsDone[`${subject}_${i}`]) remaining.push({ subject, topic });
       });
@@ -683,7 +658,7 @@ const handlePanic = () => {
     if (!customRevisionPlan) return [];
     const scheduled = new Set(customRevisionPlan.flatMap(d => d.topics.map(t => `${t.subject}:::${t.topic}`)));
     const result: {subject: string; topic: string}[] = [];
-    Object.entries(NEET_TOPICS).forEach(([subject, topics]) => {
+    Object.entries(TOPICS).forEach(([subject, topics]) => {
       topics.forEach(topic => {
         if (!scheduled.has(`${subject}:::${topic}`)) result.push({ subject, topic });
       });
@@ -789,7 +764,7 @@ const handlePanic = () => {
         <header className="h-16 flex items-center justify-between px-4 border-b border-white/5 bg-zinc-900/20 backdrop-blur-md overflow-x-auto gap-2">
            <div className="flex items-center gap-2 flex-shrink-0">
              <div className="flex items-center gap-1.5 text-orange-400 bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20"><Flame size={14} className="fill-orange-400" /><span className="text-xs font-bold">{streak} Days</span></div>
-             <Link href="/exam" className="flex items-center gap-1.5 text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 hover:bg-blue-500/20 transition-colors" title="NEET Exam Simulator">
+             <Link href="/exam" className="flex items-center gap-1.5 text-blue-400 bg-blue-500/10 px-3 py-1 rounded-full border border-blue-500/20 hover:bg-blue-500/20 transition-colors" title="Exam Simulator">
                <ClipboardList size={14} />
                <span className="text-xs font-bold">Exam</span>
              </Link>
@@ -898,7 +873,7 @@ const handlePanic = () => {
       <div className="flex-shrink-0 w-12 h-full border-l border-white/5 bg-zinc-900/40 backdrop-blur-xl flex flex-col items-center py-4 gap-2 z-20">
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'notebook') setRightSidebarOpen(false); else { setRightSidebarMode('notebook'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'notebook' ? 'text-pink-400 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Notebook"><BookOpen size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'plan') setRightSidebarOpen(false); else { setRightSidebarMode('plan'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'plan' ? 'text-pink-300 bg-pink-500/15' : 'text-zinc-500 hover:text-white'}`} title="Revision Plan"><CalendarDays size={18} /></button>
-        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/15' : 'text-zinc-500 hover:text-white'}`} title="Formula Sheet"><BookMarked size={18} /></button>
+        <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'formulas') setRightSidebarOpen(false); else { setRightSidebarMode('formulas'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'formulas' ? 'text-teal-400 bg-teal-500/15' : 'text-zinc-500 hover:text-white'}`} title="Quick Reference"><BookMarked size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'goals') setRightSidebarOpen(false); else { setRightSidebarMode('goals'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'goals' ? 'text-emerald-400 bg-emerald-500/15' : 'text-zinc-500 hover:text-white'}`} title="Daily Goals"><Target size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'analytics') setRightSidebarOpen(false); else { setRightSidebarMode('analytics'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'analytics' ? 'text-blue-400 bg-blue-500/15' : 'text-zinc-500 hover:text-white'}`} title="Progress Analytics"><BarChart2 size={18} /></button>
         <button onClick={() => { if (isRightSidebarOpen && rightSidebarMode === 'mistakes') setRightSidebarOpen(false); else { setRightSidebarMode('mistakes'); setRightSidebarOpen(true); } }} className={`p-2.5 rounded-lg transition-colors ${isRightSidebarOpen && rightSidebarMode === 'mistakes' ? 'text-yellow-400 bg-yellow-500/15' : 'text-zinc-500 hover:text-white'}`} title="Mistake Log"><AlertTriangle size={18} /></button>
@@ -914,7 +889,7 @@ const handlePanic = () => {
                    : rightSidebarMode === 'mistakes' ? <><AlertTriangle size={14} className="text-yellow-500"/> Mistake Log</>
                    : rightSidebarMode === 'analytics' ? <><BarChart2 size={14} className="text-blue-400"/> Progress Analytics</>
                    : rightSidebarMode === 'goals' ? <><Target size={14} className="text-emerald-400"/> Daily Goals</>
-                   : rightSidebarMode === 'formulas' ? <><BookMarked size={14} className="text-teal-400"/> Formula Sheet</>
+                   : rightSidebarMode === 'formulas' ? <><BookMarked size={14} className="text-teal-400"/> Quick Reference</>
                    : <><CalendarDays size={14} className="text-pink-400"/> Revision Plan</>}
                </span>
                <div className="flex items-center gap-2">
@@ -1030,11 +1005,11 @@ const handlePanic = () => {
                    <div>
                      <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3 font-semibold">Subject Progress</div>
                      <div className="space-y-3">
-                       {Object.entries(NEET_TOPICS).map(([subject, topics]) => {
+                       {Object.entries(TOPICS).map(([subject, topics]) => {
                          const done = topics.filter((_, i) => topicsDone[`${subject}_${i}`]).length;
                          const pct = Math.round((done / topics.length) * 100);
-                         const color = subject === 'Biology' ? 'from-emerald-500 to-teal-500' : subject === 'Physics' ? 'from-blue-500 to-indigo-500' : 'from-purple-500 to-pink-500';
-                         const bg = subject === 'Biology' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : subject === 'Physics' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400';
+                         const color = subject === 'Design' ? 'from-emerald-500 to-teal-500' : subject === 'Textiles & Craft' ? 'from-blue-500 to-indigo-500' : 'from-purple-500 to-pink-500';
+                         const bg = subject === 'Design' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : subject === 'Textiles & Craft' ? 'bg-blue-500/10 border-blue-500/20 text-blue-400' : 'bg-purple-500/10 border-purple-500/20 text-purple-400';
                          return (
                            <div key={subject}>
                              <div className="flex justify-between items-center mb-1.5">
@@ -1285,11 +1260,11 @@ const handlePanic = () => {
                                    <div className="text-xs text-zinc-700 text-center py-2 border border-dashed border-white/10 rounded-lg">Drop topics here</div>
                                  )}
                                  {topics.map(({ subject, topic }, topicIdx) => {
-                                   const tIdx = NEET_TOPICS[subject]?.indexOf(topic) ?? -1;
+                                   const tIdx = TOPICS[subject]?.indexOf(topic) ?? -1;
                                    const isDone = tIdx !== -1 && !!topicsDone[`${subject}_${tIdx}`];
                                    const isSrc = planDragSrc?.dayIdx === dayIdx && planDragSrc?.topicIdx === topicIdx;
                                    const isDragTarget = planDragOver?.dayIdx === dayIdx && planDragOver?.topicIdx === topicIdx;
-                                   const subjectColor = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                   const subjectColor = subject === 'Design' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Textiles & Craft' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
                                    return (
                                      <div key={topicIdx}
                                        className={`flex items-center gap-2 rounded-lg transition-all ${isEditingPlan ? 'bg-white/5 px-2 py-1.5 group/topic hover:bg-white/10' : ''} ${isSrc ? 'opacity-30' : ''} ${isDone && !isEditingPlan ? 'opacity-40' : ''} ${isDragTarget ? 'border-t-2 border-pink-400' : ''}`}
@@ -1344,7 +1319,7 @@ const handlePanic = () => {
                                        {unscheduled.length === 0 ? (
                                          <div className="text-xs text-zinc-600 text-center py-3">All topics are already scheduled!</div>
                                        ) : unscheduled.map(({ subject, topic }, i) => {
-                                         const sc = subject === 'Biology' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Physics' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
+                                         const sc = subject === 'Design' ? 'text-emerald-400 bg-emerald-500/10' : subject === 'Textiles & Craft' ? 'text-blue-400 bg-blue-500/10' : 'text-purple-400 bg-purple-500/10';
                                          return (
                                            <button key={i} onClick={() => addTopicToDay(dayIdx, subject, topic)}
                                              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-left">
@@ -1389,14 +1364,14 @@ const handlePanic = () => {
                        </div>
                        <div className="flex border-b border-white/5 flex-shrink-0 items-center">
                          <div className="flex flex-1">
-                           {Object.keys(NEET_TOPICS).map(subject => {
-                             const subjectDone = NEET_TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
-                             const color = subject === 'Biology' ? 'emerald' : subject === 'Physics' ? 'blue' : 'purple';
+                           {Object.keys(TOPICS).map(subject => {
+                             const subjectDone = TOPICS[subject].filter((_, i) => topicsDone[`${subject}_${i}`]).length;
+                             const color = subject === 'Design' ? 'emerald' : subject === 'Textiles & Craft' ? 'blue' : 'purple';
                              return (
                                <button key={subject} onClick={() => setActiveSubject(subject)}
                                  className={`flex-1 py-2.5 text-xs font-medium transition-colors border-b-2 ${activeSubject === subject ? `border-${color}-500 text-white` : 'border-transparent text-zinc-500 hover:text-zinc-300'}`}>
                                  {subject}
-                                 <span className="ml-1 opacity-50">{subjectDone}/{NEET_TOPICS[subject].length}</span>
+                                 <span className="ml-1 opacity-50">{subjectDone}/{TOPICS[subject].length}</span>
                                </button>
                              );
                            })}
@@ -1406,7 +1381,7 @@ const handlePanic = () => {
                          </button>
                        </div>
                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                         {NEET_TOPICS[activeSubject].map((chapter, i) => {
+                         {TOPICS[activeSubject].map((chapter, i) => {
                            const key = `${activeSubject}_${i}`;
                            const done = !!topicsDone[key];
                            if (showOnlyUnchecked && done) return null;
